@@ -1,0 +1,98 @@
+name: Sensitive Data Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [main]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin +refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+
+      - name: Detect security-reviewed label
+        id: label
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "security_reviewed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          labels="${{ join(github.event.pull_request.labels.*.name, ',') }}"
+          if [[ ",$labels," == *",security-reviewed,"* ]]; then
+            echo "security_reviewed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "security_reviewed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Scan for sensitive data
+        id: scan
+        run: |
+          set +e
+          report_path="$RUNNER_TEMP/sensitive-data-report.md"
+          python .github/scripts/scan_sensitive_data.py --report-file "$report_path" --max-findings 200
+          exit_code=$?
+          if [ -f "$report_path" ]; then
+            cat "$report_path" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+          echo "report_path=$report_path" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Post findings comment
+        if: github.event_name == 'pull_request' && steps.scan.outputs.exit_code != '0'
+        uses: actions/github-script@v7
+        env:
+          REPORT_PATH: ${{ steps.scan.outputs.report_path }}
+        with:
+          script: |
+            const fs = require('fs');
+            const reportPath = process.env.REPORT_PATH;
+            let body = "Sensitive data scan detected findings.\n";
+            if (reportPath && fs.existsSync(reportPath)) {
+              let report = fs.readFileSync(reportPath, 'utf8');
+              if (report.length > 60000) {
+                report = report.slice(0, 60000) + "\n\n(Truncated)";
+              }
+              body += "\n" + report;
+            } else {
+              body += "\nReport unavailable. Please review workflow logs.";
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
+
+      - name: Post override warning
+        if: github.event_name == 'pull_request' && steps.scan.outputs.exit_code != '0' && steps.label.outputs.security_reviewed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = [
+              "Sensitive data scanner found matches, but `security-reviewed` label is present.",
+              "Please ensure this was reviewed and approved by security."
+            ].join("\n");
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
+
+      - name: Fail without override
+        if: steps.scan.outputs.exit_code != '0' && steps.label.outputs.security_reviewed != 'true'
+        run: exit 1
