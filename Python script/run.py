@@ -23,6 +23,32 @@ action_create_components_from_assets = True
 # Handle command-line arguments or prompt for input
 import sys
 args = sys.argv[1:]
+
+# Check for --clear-errors flag
+if '--clear-errors' in args:
+    print("🗑️  Clearing error and log files...")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    logs_to_clear = [
+        os.path.join(script_dir, 'errors.log'),
+        os.path.join(script_dir, 'providers', 'errors.log'),
+        os.path.join(os.path.dirname(script_dir), 'logs', 'phoenix_import.log'),
+        os.path.join(os.path.dirname(script_dir), 'errors', 'errors.log')
+    ]
+    
+    cleared_count = 0
+    for log_file in logs_to_clear:
+        try:
+            if os.path.exists(log_file):
+                with open(log_file, 'w') as f:
+                    f.write('')  # Clear the file
+                print(f"  ✅ Cleared: {log_file}")
+                cleared_count += 1
+        except Exception as e:
+            print(f"  ⚠️  Could not clear {log_file}: {e}")
+    
+    print(f"✅ Cleared {cleared_count} log file(s)")
+    sys.exit(0)
+
 print("LEGACY MODE YOU ARE CURRENTLY RUNNING IS NOT LONGER MAINTAINED. PLEASE MIGRATE TO run-phx.py")
 print("Arguments supplied:", len(args))
 
