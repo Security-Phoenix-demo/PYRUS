@@ -1160,7 +1160,7 @@ def perform_actions(args, config_file_path):
         if load_flag_for_create_users_from_config(config_file_path):
             print("Creating users from Environment 'Responsable' field")
             current_users_emails = list(u.get("email") for u in load_users_from_phoenix(access_token))
-            print(f"Users in Phoenix {current_users_emails}")
+            print(f"Users in Phoenix: {len(current_users_emails)} user(s) found")
             created_users_emails = []
             for env in environments:
                 try:
