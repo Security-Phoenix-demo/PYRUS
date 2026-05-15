@@ -146,6 +146,7 @@ def populate_environments_from_env_groups_from_config(config_file_path):
             'CloudAccounts': [""],  # Add CloudAccounts if applicable
             'Status': row['Status'],
             'Responsable': responsable,
+            'BU': row.get('BU', None),
             'TeamName': row.get('TeamName', None),  # Add TeamName from the environment or set as None
             'Ticketing': load_ticketing(row),
             'Messaging': load_messaging(row),

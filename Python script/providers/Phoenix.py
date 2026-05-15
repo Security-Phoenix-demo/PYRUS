@@ -1356,6 +1356,14 @@ DEBUG = False #debug settings to trigger debug output
 access_token = None
 headers = {}
 
+def _parse_bu_list(bu):
+    """Normalize a BU value (string, comma-separated string, or list) to a list of strings."""
+    if not bu:
+        return []
+    if isinstance(bu, list):
+        return [str(b).strip() for b in bu if b and str(b).strip()]
+    return [b.strip() for b in str(bu).split(',') if b.strip()]
+
 # Global cache for components to reduce API calls in quick-check mode
 _component_cache = {
     'data': None,
@@ -1426,6 +1434,11 @@ def create_environment(environment, headers2):
         },
         "tags": []
     }
+
+    bu_list = _parse_bu_list(environment.get('BU'))
+    if bu_list:
+        payload["businessUnits"] = bu_list
+        print(f"└─ Business units: {bu_list}")
 
     # Add status tag
     if environment['Status']:
@@ -1677,6 +1690,11 @@ def update_environment(environment, existing_environment, headers2):
         headers = headers2
     payload = {}
     has_errors = False
+
+    bu_list = _parse_bu_list(environment.get('BU'))
+    if bu_list:
+        payload["businessUnits"] = bu_list
+        print(f"└─ Business units: {bu_list}")
 
     # Handle ticketing configuration
     if environment.get('Ticketing'):
@@ -2493,7 +2511,12 @@ def create_application(app, headers2):
         "tags": [],
         "owner": {"email": app['Responsable']}
     }
-    
+
+    bu_list = _parse_bu_list(app.get('BU'))
+    if bu_list:
+        payload["businessUnits"] = bu_list
+        print(f"└─ Business units: {bu_list}")
+
     print(f"└─ Debug - Criticality value: {app['Criticality']} (type: {type(app['Criticality'])})")
     print(f"└─ Debug - Owner email: '{app['Responsable']}' (type: {type(app['Responsable'])})")
     print(f"└─ Debug - App name: '{app['AppName']}' (length: {len(app['AppName'])})")
@@ -3979,6 +4002,11 @@ def update_application_crit_owner(application, existing_application, headers2):
         "criticality": application['Criticality'],
         "owner": {"email": application['Responsable']}
     }
+
+    bu_list = _parse_bu_list(application.get('BU'))
+    if bu_list:
+        payload["businessUnits"] = bu_list
+        print(f"└─ Business units: {bu_list}")
 
     # Handle ticketing configuration
     if application.get('Ticketing'):
@@ -8242,6 +8270,7 @@ def add_service(applicationSelectorName, env_id, service, tier, headers2):
         if hasattr(response, 'content'):
             print(f"Response content: {response.content}")
         return False, None
+
 
 @dispatch(str, str, dict, int, str, dict)
 def add_service(applicationSelectorName, env_id, service, tier, team, headers2):
