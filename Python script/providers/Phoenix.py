@@ -4255,6 +4255,124 @@ def create_component_rules(applicationName, component, headers2):
     if component.get('MULTI_MultiConditionRules') and is_valid_value(component.get('MULTI_MultiConditionRules')):
         create_multicondition_component_rules(applicationName, component['ComponentName'], component.get('MULTI_MultiConditionRules'), headers)
 
+def _is_valid_multicondition_value(value):
+    if value is None:
+        return False
+    if isinstance(value, str) and (not value.strip() or value.lower() == 'null'):
+        return False
+    if isinstance(value, list) and len(value) == 0:
+        return False
+    return True
+
+def _as_list(value):
+    return value if isinstance(value, list) else [value]
+
+def _normalize_repository_values(repository_names):
+    processed_repository_names = []
+    for repo_name in _as_list(repository_names):
+        if repo_name and isinstance(repo_name, str):
+            if SHORTEN_REPOSITORY_PATH:
+                processed_repository_names.append(extract_last_two_path_parts(repo_name))
+            else:
+                processed_repository_names.append(repo_name)
+    return processed_repository_names
+
+def _normalize_tag_values(tag_values):
+    tags = []
+    for tag in _as_list(tag_values):
+        if not _is_valid_multicondition_value(tag):
+            continue
+        if isinstance(tag, dict):
+            if tag.get('key') and tag.get('value'):
+                tags.append({"key": str(tag.get('key')).strip(), "value": str(tag.get('value')).strip()})
+            elif tag.get('value'):
+                tags.append({"value": str(tag.get('value')).strip()})
+            continue
+
+        tag = str(tag).strip()
+        if ':' in tag:
+            key, value = tag.split(':', 1)
+            key = key.strip()
+            value = value.strip()
+            if key and value:
+                tags.append({"key": key, "value": value})
+        else:
+            tags.append({"value": tag})
+    return tags
+
+def _format_multicondition_detail_value(value):
+    if isinstance(value, list):
+        return ','.join(_format_multicondition_detail_value(item) for item in value)
+    if isinstance(value, dict):
+        if value.get('key') and value.get('value'):
+            return f"{value.get('key')}={value.get('value')}"
+        if value.get('value'):
+            return str(value.get('value'))
+        return json.dumps(value, separators=(',', ':'))
+    return str(value)
+
+def _first_multicondition_value(multicondition, aliases):
+    for alias in aliases:
+        if alias in multicondition and _is_valid_multicondition_value(multicondition.get(alias)):
+            return multicondition.get(alias)
+    return None
+
+def _build_multicondition_negate_filter(multicondition):
+    """
+    Build filter.negateFilter from Pyrus _NOT fields.
+
+    Each mapping is (yaml_aliases, api_field, rule_name_label, value_type).
+    value_type controls normalization: tags, repository, array, or string/scalar.
+    AccountId_NOT is an alias for ProviderAccountId_NOT (same as YamlHelper for inclusion).
+    """
+    negate_filter = {}
+    negate_details = []
+
+    field_mappings = [
+        (('SearchName_NOT',), 'keyLike', 'KEY_NOT', 'string'),
+        (('RepositoryName_NOT',), 'repository', 'REPO_NOT', 'repository'),
+        # Priority order mimics the positive rules "last writer wins":
+        # Tags_rule > Tag_rule > Tags > Tag (so Tags_rule_NOT is first here).
+        (('Tags_rule_NOT', 'Tag_rule_NOT', 'Tags_NOT', 'Tag_NOT'), 'tags', 'TAGS_NOT', 'tags'),
+        (('ProviderAccountId_NOT', 'AccountId_NOT'), 'providerAccountId', 'PROVIDER_ACCOUNT_IDS_NOT', 'array'),
+        (('ProviderAccountName_NOT',), 'providerAccountName', 'PROVIDER_ACCOUNT_NAMES_NOT', 'array'),
+        (('ResourceGroup_NOT',), 'resourceGroup', 'RESOURCE_GROUPS_NOT', 'array'),
+        (('AssetType_NOT',), 'assetType', 'ASSET_NOT', 'string'),
+        (('Cidrs_NOT',), 'cidrs', 'CIDRS_NOT', 'array'),
+        (('Hostnames_NOT',), 'hostnames', 'HOSTNAMES_NOT', 'array'),
+        (('OsNames_NOT',), 'osNames', 'OS_NAMES_NOT', 'array'),
+        (('Netbios_NOT',), 'netbios', 'NETBIOS_NOT', 'array'),
+        (('Cidr_NOT',), 'cidr', 'CIDR_NOT', 'string'),
+        (('Fqdn_NOT',), 'fqdn', 'FQDN_NOT', 'array'),
+    ]
+
+    for aliases, api_field, detail_label, value_type in field_mappings:
+        raw_value = _first_multicondition_value(multicondition, aliases)
+        if raw_value is None:
+            continue
+
+        if value_type == 'tags':
+            value = _normalize_tag_values(raw_value)
+        elif value_type == 'repository':
+            value = _normalize_repository_values(raw_value)
+        elif value_type == 'array':
+            value = [item for item in _as_list(raw_value) if _is_valid_multicondition_value(item)]
+        else:
+            value = raw_value[0] if isinstance(raw_value, list) and raw_value else raw_value
+
+        if not _is_valid_multicondition_value(value):
+            continue
+
+        negate_filter[api_field] = value
+        negate_details.append(f"{detail_label}:{_format_multicondition_detail_value(value)}")
+
+    # Mirror positive `if Cidrs ... elif Cidr ...`: Cidrs_NOT takes precedence over Cidr_NOT.
+    if 'cidrs' in negate_filter and 'cidr' in negate_filter:
+        negate_filter.pop('cidr')
+        negate_details = [d for d in negate_details if not d.startswith('CIDR_NOT:')]
+
+    return negate_filter, negate_details
+
 def create_multicondition_component_rules(applicationName, componentName, multiconditionRules, headers2, component_id=None):
     global headers
     if not headers:
@@ -4506,10 +4624,20 @@ def create_multicondition_component_rules(applicationName, componentName, multic
                         if DEBUG:
                             print(f"   └─ WARNING: All tags were filtered out, removed empty tags array from filter")
 
+                negate_filter, negate_details = _build_multicondition_negate_filter(multicondition)
+                if negate_filter:
+                    rule['filter']['negateFilter'] = negate_filter
+
                 if not rule['filter']:
                     print(f" ⚠️  Skipping MC-R {componentName} - empty filter (no valid criteria)")
                     rules_failed += 1
                     break  # Skip this rule, but continue with others
+
+                if negate_details:
+                    rule_name = f"MC-R {componentName} EXCLUDING {','.join(negate_details)}"
+                    if len(rule_name) > 255:
+                        rule_name = rule_name[:252] + "..."
+                    rule['name'] = rule_name
 
                 # ID-BASED ENDPOINT FIX: Use /v1/components/{id}/rules when ID is available
                 # This eliminates ambiguity when Application and Environment names collide
@@ -5039,6 +5167,10 @@ def create_multicondition_service_rules(environmentName, serviceName, multicondi
             rule['filter']['netbios'] = netbios_names
             filter_details.append(f"NETBIOS:{netbios_names}")
 
+        negate_filter, negate_details = _build_multicondition_negate_filter(multicondition)
+        if negate_filter:
+            rule['filter']['negateFilter'] = negate_filter
+
         if not rule['filter']:
             print(f" ⚠️  Skipping MC-R {serviceName} - empty filter (no valid criteria)")
             rules_failed += 1
@@ -5046,6 +5178,8 @@ def create_multicondition_service_rules(environmentName, serviceName, multicondi
 
         # Create descriptive rule name based on the filter type and value
         rule_name = f"MC-R-{serviceName}-{' AND '.join(filter_details)}"
+        if negate_details:
+            rule_name = f"{rule_name} EXCLUDING {','.join(negate_details)}"
         
         # Truncate rule name if too long (max 255 chars)
         if len(rule_name) > 255:
@@ -5060,6 +5194,10 @@ def create_multicondition_service_rules(environmentName, serviceName, multicondi
             print(f"   Filter details: {filter_details}")
             print(f"   Filter content:")
             print(f"      {json.dumps(rule['filter'], indent=6)}")
+            if negate_filter:
+                print(f"   Negate filter details: {negate_details}")
+                print(f"   Negate filter content:")
+                print(f"      {json.dumps(rule['filter']['negateFilter'], indent=6)}")
 
         # ID-BASED ENDPOINT FIX: Use /v1/components/{id}/rules when ID is available
         # This eliminates ambiguity when Application and Environment names collide

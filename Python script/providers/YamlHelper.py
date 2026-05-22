@@ -469,6 +469,10 @@ def load_multi_condition_rule(mcr):
         "AssetType": mcr.get("AssetType", None)
     }
 
+    for key, value in mcr.items():
+        if key.endswith("_NOT"):
+            rule[key] = value
+
     if all(value is None for value in rule.values()):
         print(f'Multicondition rule is missing values, skipping multicondition rule. Received MultiConditionRule: {mcr}')
         return None
