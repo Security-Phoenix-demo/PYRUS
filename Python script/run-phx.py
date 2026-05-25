@@ -1,5 +1,6 @@
 import time
 import os
+import sys
 import argparse
 import traceback
 import stat
@@ -17,7 +18,7 @@ from providers.Phoenix import get_phoenix_components, populate_phoenix_teams, ge
 import providers.Phoenix as phoenix_module  # For YAML context tracking and error logging
 import providers.YamlHelper as yaml_helper_module  # For config file summary and preview
 from providers.Utils import populate_domains, get_subdomains, populate_users_with_all_team_access, add_PAT_to_github_repo_url
-from providers.YamlHelper import populate_repositories_from_config, populate_teams, populate_hives, populate_subdomain_owners, populate_environments_from_env_groups_from_config, populate_all_access_emails_from_config, populate_applications_from_config, load_flag_for_create_users_from_config, load_run_config, load_remote_configuration_locations, load_github_repo_folder, load_github_config_file_name, load_teams_folder, load_hives_config
+from providers.YamlHelper import populate_repositories_from_config, populate_teams, populate_hives, populate_subdomain_owners, populate_environments_from_env_groups_from_config, populate_all_access_emails_from_config, populate_applications_from_config, load_flag_for_create_users_from_config, load_flag_auto_create_users_from_config, load_run_config, load_remote_configuration_locations, load_github_repo_folder, load_github_config_file_name, load_teams_folder, load_hives_config
 
 
 # =============================================================================
@@ -1777,6 +1778,24 @@ def refresh_access_token(stop_event):
             time.sleep(5)
 
 
+def resolve_auto_create_users(args, config_file_path):
+    """Resolve master auto user creation flag: CLI > config.ini (via args) > YAML > default true."""
+    if any(arg.startswith('--auto_create_users') for arg in sys.argv):
+        return args.auto_create_users == 'true'
+    if getattr(args, 'auto_create_users', 'true') == 'false':
+        return False
+    if config_file_path and os.path.exists(config_file_path):
+        return load_flag_auto_create_users_from_config(config_file_path)
+    return True
+
+
+def should_create_users_from_responsable(create_users_from_responsable, config_file_path):
+    """Responsable-field user creation when master flag is on and sub-toggle or YAML allows it."""
+    if not phoenix_module.AUTO_CREATE_USERS:
+        return False
+    return create_users_from_responsable or load_flag_for_create_users_from_config(config_file_path)
+
+
 def perform_actions(args, config_file_path):  
 
     client_id = args.client_id
@@ -1805,6 +1824,12 @@ def perform_actions(args, config_file_path):
     if 'SHORTEN_REPOSITORY_PATH' in config_ini_params:
         phoenix_module.SHORTEN_REPOSITORY_PATH = config_ini_params['SHORTEN_REPOSITORY_PATH']
         print(f"🔧 Set SHORTEN_REPOSITORY_PATH = {phoenix_module.SHORTEN_REPOSITORY_PATH}")
+    
+    phoenix_module.AUTO_CREATE_USERS = resolve_auto_create_users(args, config_file_path)
+    if not phoenix_module.AUTO_CREATE_USERS:
+        print("🔧 Auto user creation disabled (--auto_create_users=false)")
+    else:
+        print("🔧 Auto user creation enabled")
     
     action_teams = args.action_teams == 'true'
     action_create_users_from_teams = args.action_create_users_from_teams == 'true'
@@ -1873,7 +1898,7 @@ def perform_actions(args, config_file_path):
         execution_report['actions_performed'].append('Teams')
         all_team_access = populate_users_with_all_team_access(teams, defaultAllAccessAccounts)
         
-        if action_create_users_from_teams:
+        if action_create_users_from_teams and phoenix_module.AUTO_CREATE_USERS:
             print("Creating users from team configuration")
             current_users_emails = list(u.get("email") for u in load_users_from_phoenix(headers))
             created_users_emails = []
@@ -1938,6 +1963,8 @@ def perform_actions(args, config_file_path):
                         track_operation('users', 'create_user_from_team', member.get('EmailAddress', member.get('Name', 'UNKNOWN')), False, error_msg)
                         if phoenix_module.DEBUG:
                             print(f"Member data: {member}")
+        elif action_create_users_from_teams:
+            print("⏭️  Skipping create users from teams (auto user creation disabled)")
         
         # Track team creation
         try:
@@ -1952,7 +1979,10 @@ def perform_actions(args, config_file_path):
         
         # Track user creation and team assignments
         try:
-            check_and_create_missing_users(teams, all_team_access, hive_staff, access_token)
+            if phoenix_module.AUTO_CREATE_USERS:
+                check_and_create_missing_users(teams, all_team_access, hive_staff, access_token)
+            else:
+                print("⏭️  Skipping check_and_create_missing_users (auto user creation disabled)")
             create_team_rules(teams, pteams, access_token)
             assign_users_to_team(pteams, new_pteams, teams, all_team_access, hive_staff, access_token)
             
@@ -1991,7 +2021,7 @@ def perform_actions(args, config_file_path):
             track_operation('repositories', 'load_repository', repo['RepositoryName'], True)
 
     
-        if load_flag_for_create_users_from_config(config_file_path):
+        if should_create_users_from_responsable(create_users_from_responsable, config_file_path):
             print("Creating users from Environment 'Responsable' field")
             current_users_emails = list(u.get("email") for u in load_users_from_phoenix(access_token))
             print(f"Users in Phoenix {current_users_emails}")
@@ -2132,8 +2162,7 @@ def perform_actions(args, config_file_path):
         applications = populate_applications_from_config(config_file_path)
         
         # Determine if we should create users from Responsable field
-        # Priority: CLI argument > config file flag
-        should_create_users = create_users_from_responsable or load_flag_for_create_users_from_config(config_file_path)
+        should_create_users = should_create_users_from_responsable(create_users_from_responsable, config_file_path)
         
         if should_create_users:
            print("🔧 Creating users from Application 'Responsable' field")
@@ -2217,7 +2246,10 @@ def perform_actions(args, config_file_path):
            
            print(f"   └─ 📊 User creation summary: {len(created_users_emails)} new users created")
         else:
-           print("⏭️  Skipping user creation from 'Responsable' field (disabled via CLI flag)")
+           if not phoenix_module.AUTO_CREATE_USERS:
+               print("⏭️  Skipping user creation from 'Responsable' field (auto user creation disabled)")
+           else:
+               print("⏭️  Skipping user creation from 'Responsable' field (disabled via CLI/YAML flag)")
         
         # Component tracking is already set up at the beginning of perform_actions()
         # No need to set it up again here
@@ -2502,6 +2534,7 @@ def load_credentials_from_config_ini(config_ini_path):
             action_mappings = {
                 'action_teams': 'action_teams',
                 'action_create_users_from_teams': 'action_create_users_from_teams',
+                'auto_create_users': 'auto_create_users',
                 'create_users_from_responsable': 'create_users_from_responsable',
                 'action_code': 'action_code',
                 'action_cloud': 'action_cloud',
@@ -2624,6 +2657,8 @@ Examples:
                         required=False, help="Flag triggering teams action")
     parser.add_argument("--action_create_users_from_teams", type=str, default="false",
                         required=False, help="Flag triggering automatic user creation from team configuration")
+    parser.add_argument("--auto_create_users", type=str, default="true",
+                        required=False, help="Master flag for all automatic user creation (default: true). Set false to disable.")
     parser.add_argument("--create_users_from_responsable", type=str, default="true",
                         required=False, help="Flag to enable automatic user creation from application 'Responsable' field (default: true)")
     parser.add_argument("--action_code", type=str, default="false", 
@@ -2703,7 +2738,7 @@ Examples:
             
             # Action flags (only if not explicitly set to 'true' via command line)
             action_flags = [
-                'action_teams', 'action_create_users_from_teams', 'create_users_from_responsable',
+                'action_teams', 'action_create_users_from_teams', 'auto_create_users', 'create_users_from_responsable',
                 'action_code', 'action_cloud', 'action_deployment', 'action_autolink_deploymentset',
                 'action_autocreate_teams_from_pteam', 'action_create_components_from_assets', 'action_autogroup'
             ]
@@ -2712,6 +2747,11 @@ Examples:
                 cli_value = getattr(args, flag, 'false')
                 if cli_value == 'false' and flag in config_ini_values:
                     setattr(args, flag, config_ini_values[flag])
+            
+            # Master auto_create_users defaults to true; allow config.ini to disable when CLI not set
+            if not any(arg.startswith('--auto_create_users') for arg in sys.argv):
+                if 'auto_create_users' in config_ini_values:
+                    args.auto_create_users = config_ini_values['auto_create_users']
             
             # Autogroup config
             if args.autogroup_config == 'tv/tag-automation/autogroup-config.yaml' and 'autogroup_config' in config_ini_values:
