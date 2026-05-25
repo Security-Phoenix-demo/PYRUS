@@ -9,6 +9,7 @@ ConfigFiles:
   - /bv/core-structure-bv-7.yaml      # Config files to process
 
 # User Management (NEW in v4.8.3)
+AutoCreateUsers: true                   # Master switch: all automatic user creation (default true)
 CreateUsersForApplications: true        # Auto-create users from Responsable field
 
 # Team Configuration
@@ -27,9 +28,10 @@ ConfigFileName: assetconfig.phoenix     # Config file name in repos
 ## Essential Structure
 
 ```yaml
-# User Creation Control (NEW)
+# User Creation Control
 AllAccessAccounts: []                   # List of admin users
-CreateUsersForApplications: true        # Auto-create users (optional)
+AutoCreateUsers: true                   # Master switch for all auto user creation (optional)
+CreateUsersForApplications: true        # Auto-create users from Responsable (optional)
 
 DeploymentGroups:
   - AppName: "MyApp"                    # Required
@@ -69,10 +71,15 @@ Environment Groups:
 |-------|--------|---------|
 | `SearchName` | String | `"infrastructure-search"` |
 | `AssetType` | String | Infrastructure types only (see below) |
-| `Tags` | List | `["infra", "production"]` |
+| `Tags` | **List** | `["infra", "production"]` |
 | `Cidr` | String | `"10.1.1.0/24"` |
-| `ProviderAccountId` | **List** | `["12345678-1234-1234-1234-123456789012"]` |
-| `Hostnames` | List | `["server-01", "server-02"]` |
+| `ProviderAccountId` | **List** ⚠️ | `["uuid-1", "uuid-2"]` - MUST be a list, even for single values |
+| `ProviderAccountName` | **List** | `["account-name-1"]` |
+| `ResourceGroup` | **List** | `["resource-group-1"]` |
+| `Hostnames` | **List** | `["server-01", "server-02"]` |
+| `Fqdn` | **List** | `["api.company.com"]` |
+| `OsNames` | **List** | `["Ubuntu", "Windows Server"]` |
+| `Netbios` | **List** | `["SERVER01", "SERVER02"]` |
 
 ## Supported AssetType Values
 
@@ -264,9 +271,27 @@ for app in config.get('DeploymentGroups', []):
 "
 ```
 
+## Required List Fields
+
+⚠️ **IMPORTANT**: The following fields MUST always be formatted as YAML lists, even when containing a single value:
+
+| Field | Correct Format | Incorrect Format |
+|-------|----------------|------------------|
+| `ProviderAccountId` | `ProviderAccountId:`<br>`  - "uuid-here"` | `ProviderAccountId: "uuid-here"` |
+| `ProviderAccountName` | `ProviderAccountName:`<br>`  - "name"` | `ProviderAccountName: "name"` |
+| `ResourceGroup` | `ResourceGroup:`<br>`  - "rg-1"` | `ResourceGroup: "rg-1"` |
+| `TeamNames` | `TeamNames:`<br>`  - "Team1"` | `TeamNames: "Team1"` |
+| `Tags` | `Tags:`<br>`  - "tag1"` | `Tags: "tag1"` |
+| `Tags_label` | `Tags_label:`<br>`  - "Label: Value"` | `Tags_label: "Label: Value"` |
+| `Fqdn` | `Fqdn:`<br>`  - "api.com"` | `Fqdn: "api.com"` |
+| `Hostnames` | `Hostnames:`<br>`  - "host1"` | `Hostnames: "host1"` |
+| `OsNames` | `OsNames:`<br>`  - "Ubuntu"` | `OsNames: "Ubuntu"` |
+| `Netbios` | `Netbios:`<br>`  - "SERVER01"` | `Netbios: "SERVER01"` |
+
 ## Validation Checklist
 
 - [ ] `ProviderAccountId` is a **list**, not a string
+- [ ] All list fields (see table above) are formatted as lists
 - [ ] Required fields are present (`AppName`, `ReleaseDefinitions`, `Responsable`)
 - [ ] Email addresses are valid format
 - [ ] Asset types use **only** allowed values from the table above
