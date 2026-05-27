@@ -3,6 +3,7 @@ import yaml
 from pathlib import Path
 from providers.Utils import calculate_criticality
 from email_validator import validate_email, EmailNotValidError
+from typing import List
 
 # Handle imports with fallback for both relative and absolute imports
 try:
@@ -160,6 +161,8 @@ def populate_environments_from_env_groups_from_config(config_file_path):
                 repository_names = service.get('RepositoryName', [])
                 if isinstance(repository_names, str):
                     repository_names = [repository_names]
+                
+                provider_account_ids = _get_provider_account_id_or_account_id(service)
                 # Build the service entry with association details
                 service_entry = {
                     'Service': service['Service'],
@@ -184,7 +187,7 @@ def populate_environments_from_env_groups_from_config(config_file_path):
                     "Netbios": service.get("Netbios", None),
                     "OsNames": service.get("OsNames", None),
                     "Hostnames": service.get("Hostnames", None),
-                    "ProviderAccountId": service.get("ProviderAccountId", None),
+                    "ProviderAccountId": provider_account_ids,
                     "ProviderAccountName": service.get("ProviderAccountName", None),
                     "ResourceGroup": service.get("ResourceGroup", None),
                     "AssetType": service.get("AssetType", None)
@@ -382,6 +385,8 @@ def populate_applications_from_config(config_file_path):
             if isinstance(repository_names, str):
                 repository_names = [repository_names]
 
+            provider_account_ids = _get_provider_account_id_or_account_id(component)
+            
             # Get ticketing and messaging configurations
             ticketing = load_ticketing(component) or app.get('Ticketing')  # Inherit from app if not specified
             messaging = load_messaging(component) or app.get('Messaging')  # Inherit from app if not specified
@@ -404,7 +409,7 @@ def populate_applications_from_config(config_file_path):
                 'Netbios': component.get('Netbios', None),
                 'OsNames': component.get('OsNames', None),
                 'Hostnames': component.get('Hostnames', None),
-                'ProviderAccountId': component.get('ProviderAccountId', None),
+                'ProviderAccountId': provider_account_ids,
                 'ProviderAccountName': component.get('ProviderAccountName', None),
                 'ResourceGroup': component.get('ResourceGroup', None),
                 'AssetType': component.get('AssetType', None),
@@ -448,8 +453,8 @@ def load_multi_condition_rule(mcr):
         return None
     
     # Map AccountId to ProviderAccountId for backward compatibility
-    provider_account_id = mcr.get("ProviderAccountId") or mcr.get("AccountId")
-    
+    provider_account_id = _get_provider_account_id_or_account_id(mcr)
+        
     rule = {
         "RepositoryName": mcr.get("RepositoryName", None),
         "SearchName": mcr.get("SearchName", None),
@@ -469,6 +474,10 @@ def load_multi_condition_rule(mcr):
         "ResourceGroup": mcr.get("ResourceGroup", None),
         "AssetType": mcr.get("AssetType", None)
     }
+
+    for key, value in mcr.items():
+        if key.endswith("_NOT"):
+            rule[key] = value
 
     if all(value is None for value in rule.values()):
         print(f'Multicondition rule is missing values, skipping multicondition rule. Received MultiConditionRule: {mcr}')
@@ -518,6 +527,18 @@ def load_flag_for_create_users_from_config(config_file_path):
         return False
     
     return False
+
+
+def load_flag_auto_create_users_from_config(config_file_path):
+    """Return False when AutoCreateUsers is explicitly disabled in core-structure YAML."""
+    with open(config_file_path, 'r') as stream:
+        repos_yaml = yaml.safe_load(stream)
+
+    if isinstance(repos_yaml, dict):
+        value = repos_yaml.get('AutoCreateUsers', True)
+        if value is False or (isinstance(value, str) and value.lower() == 'false'):
+            return False
+    return True
 
 
 def load_ticketing(element):
@@ -955,3 +976,12 @@ def print_config_file_summary(config_file_path, file_index, total_files, api_dom
     print("=" * 80 + "\n")
     
     return summary
+
+
+def _get_provider_account_id_or_account_id(input: dict) -> List[str]:
+    provider_account_ids = input.get("ProviderAccountId") or input.get("AccountId")
+
+    if provider_account_ids and isinstance(provider_account_ids, str):
+        provider_account_ids = [provider_account_ids]
+    
+    return provider_account_ids if provider_account_ids else []
