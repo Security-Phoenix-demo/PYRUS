@@ -1353,6 +1353,7 @@ SHORTEN_REPOSITORY_PATH = False # Controls whether repository paths in rules are
 
 APIdomain = "https://api.demo.appsecphx.io/" #change this with your specific domain
 DEBUG = False #debug settings to trigger debug output 
+AUTO_CREATE_USERS = True  # Master switch; set from run-phx.py before actions run
 access_token = None
 headers = {}
 
@@ -1597,8 +1598,30 @@ def create_environment(environment, headers2):
                     )
                 return False
             
-            # User doesn't exist - try to create them
+            # User doesn't exist - try to create them or create without owner
             print(f"└─ 💡 User doesn't exist in Phoenix platform")
+            if not AUTO_CREATE_USERS:
+                print(f"└─ ⏭️  Auto user creation disabled — creating environment without owner")
+                payload_without_owner = {k: v for k, v in payload.items() if k != 'owner'}
+                try:
+                    api_url = construct_api_url("/v1/applications")
+                    retry_response = requests.post(api_url, headers=headers, json=payload_without_owner)
+                    retry_response.raise_for_status()
+                    print(f"└─ ✅ Environment created successfully (without owner)")
+                    print(f"└─ ⚠️  Note: Owner '{user_email}' was not assigned — auto user creation is disabled")
+                    return True
+                except requests.exceptions.RequestException as retry_error:
+                    error_msg = f"Failed to create environment without owner: {str(retry_error)}"
+                    print(f"└─ ❌ {error_msg}")
+                    log_error(
+                        'Environment Creation Failed - Without Owner (Auto Create Disabled)',
+                        environment['Name'],
+                        'N/A',
+                        f'User: {user_email}',
+                        f'Retry error: {getattr(retry_response, "content", "No response content") if "retry_response" in locals() else "N/A"}'
+                    )
+                return False
+
             print(f"└─ 🔧 Attempting to create the user automatically...")
             
             from .Utils import extract_user_name_from_email
@@ -2770,96 +2793,121 @@ def create_application(app, headers2):
                             f'Retry error: {getattr(retry_response, "content", "No response content") if "retry_response" in locals() else "N/A"}'
                         )
             else:
-                # User doesn't exist - try to create them
+                # User doesn't exist - try to create them or create without owner
                 print(f"└─ 💡 User doesn't exist in Phoenix platform")
-                print(f"└─ 🔧 Attempting to create the user automatically...")
-                
-                # Import the required function for user name extraction
-                from .Utils import extract_user_name_from_email
-                
-                # Extract first and last name from email
-                first_name, last_name = extract_user_name_from_email(user_email)
-                
-                if not first_name or not last_name:
-                    error_msg = f"Cannot extract valid first/last name from email: {user_email}"
-                    print(f"└─ ❌ {error_msg}")
-                    log_error(
-                        'Application Creation Failed - Invalid Email Format',
-                        app['AppName'],
-                        'N/A',
-                        f'User email: {user_email}',
-                        f'Could not extract first/last name from email format'
-                    )
-                    return
-                
-                # Attempt to create the user
-                print(f"└─ 👤 Creating user: {first_name} {last_name} ({user_email})")
-                try:
-                    user_created = create_user_with_role(user_email, first_name, last_name, "ORG_USER", headers)
-                    
-                    # create_user_with_role returns:
-                    # - payload dict if user was created successfully
-                    # - False if user already exists (409) - this is OK, we can retry
-                    # - None if creation failed due to an error
-                    if user_created is not None:  # User created successfully OR already exists (False)
-                        print(f"└─ ✅ User is now available in Phoenix")
-                        print(f"└─ 🔄 Retrying application creation with original user...")
-                        
-                        # Retry the original application creation
-                        try:
-                            api_url = construct_api_url("/v1/applications")
-                            retry_response = requests.post(api_url, headers=headers, json=payload)
-                            retry_response.raise_for_status()
-                            print(f"└─ ✅ Application created successfully after user creation")
-                            
-                            # Get the application ID from the response for tag addition
-                            app_response = retry_response.json()
-                            app_id = app_response.get('id')
-                            application_created = True
-                            
-                        except requests.exceptions.RequestException as retry_error:
-                            # If still fails, try without owner
-                            print(f"└─ ⚠️  Still failing with owner, trying without owner field...")
-                            payload_without_owner = {k: v for k, v in payload.items() if k != 'owner'}
-                            try:
-                                retry_response2 = requests.post(api_url, headers=headers, json=payload_without_owner)
-                                retry_response2.raise_for_status()
-                                print(f"└─ ✅ Application created successfully (without owner)")
-                                print(f"└─ ⚠️  Note: Owner '{user_email}' was not assigned - please verify user status")
-                                app_response = retry_response2.json()
-                                app_id = app_response.get('id')
-                                application_created = True
-                            except:
-                                error_msg = f"Failed to create application even after creating user: {str(retry_error)}"
-                                print(f"└─ ❌ {error_msg}")
-                                log_error(
-                                    'Application Creation Failed - After User Creation',
-                                    app['AppName'],
-                                    'N/A',
-                                    f'User: {user_email}',
-                                    f'Retry error: {getattr(retry_response, "content", "No response content") if "retry_response" in locals() else "N/A"}'
-                                )
-                    else:
-                        error_msg = f"Failed to create user: {user_email}"
+                if not AUTO_CREATE_USERS:
+                    print(f"└─ ⏭️  Auto user creation disabled — creating application without owner")
+                    payload_without_owner = {k: v for k, v in payload.items() if k != 'owner'}
+                    try:
+                        api_url = construct_api_url("/v1/applications")
+                        retry_response = requests.post(api_url, headers=headers, json=payload_without_owner)
+                        retry_response.raise_for_status()
+                        print(f"└─ ✅ Application created successfully (without owner)")
+                        print(f"└─ ⚠️  Note: Owner '{user_email}' was not assigned — auto user creation is disabled")
+                        app_response = retry_response.json()
+                        app_id = app_response.get('id')
+                        application_created = True
+                    except requests.exceptions.RequestException as retry_error:
+                        error_msg = f"Failed to create application without owner: {str(retry_error)}"
                         print(f"└─ ❌ {error_msg}")
                         log_error(
-                            'Application Creation Failed - User Creation Failed',
+                            'Application Creation Failed - Without Owner (Auto Create Disabled)',
+                            app['AppName'],
+                            'N/A',
+                            f'User: {user_email}',
+                            f'Retry error: {getattr(retry_response, "content", "No response content") if "retry_response" in locals() else "N/A"}'
+                        )
+                    if not application_created:
+                        return
+                else:
+                    print(f"└─ 🔧 Attempting to create the user automatically...")
+                    
+                    # Import the required function for user name extraction
+                    from .Utils import extract_user_name_from_email
+                    
+                    # Extract first and last name from email
+                    first_name, last_name = extract_user_name_from_email(user_email)
+                    
+                    if not first_name or not last_name:
+                        error_msg = f"Cannot extract valid first/last name from email: {user_email}"
+                        print(f"└─ ❌ {error_msg}")
+                        log_error(
+                            'Application Creation Failed - Invalid Email Format',
                             app['AppName'],
                             'N/A',
                             f'User email: {user_email}',
-                            f'Could not create user in Phoenix'
+                            f'Could not extract first/last name from email format'
                         )
+                        return
                     
-                except Exception as user_creation_error:
-                    error_msg = f"Error during user creation: {str(user_creation_error)}"
-                    print(f"└─ ❌ {error_msg}")
-                    log_error(
-                        'Application Creation Failed - User Creation Error',
-                        app['AppName'],
-                        'N/A',
-                        f'User email: {user_email}',
-                        f'User creation error: {str(user_creation_error)}'
-                    )
+                    # Attempt to create the user
+                    print(f"└─ 👤 Creating user: {first_name} {last_name} ({user_email})")
+                    try:
+                        user_created = create_user_with_role(user_email, first_name, last_name, "ORG_USER", headers)
+                        
+                        # create_user_with_role returns:
+                        # - payload dict if user was created successfully
+                        # - False if user already exists (409) - this is OK, we can retry
+                        # - None if creation failed due to an error
+                        if user_created is not None:  # User created successfully OR already exists (False)
+                            print(f"└─ ✅ User is now available in Phoenix")
+                            print(f"└─ 🔄 Retrying application creation with original user...")
+                            
+                            # Retry the original application creation
+                            try:
+                                api_url = construct_api_url("/v1/applications")
+                                retry_response = requests.post(api_url, headers=headers, json=payload)
+                                retry_response.raise_for_status()
+                                print(f"└─ ✅ Application created successfully after user creation")
+                                
+                                # Get the application ID from the response for tag addition
+                                app_response = retry_response.json()
+                                app_id = app_response.get('id')
+                                application_created = True
+                                
+                            except requests.exceptions.RequestException as retry_error:
+                                # If still fails, try without owner
+                                print(f"└─ ⚠️  Still failing with owner, trying without owner field...")
+                                payload_without_owner = {k: v for k, v in payload.items() if k != 'owner'}
+                                try:
+                                    retry_response2 = requests.post(api_url, headers=headers, json=payload_without_owner)
+                                    retry_response2.raise_for_status()
+                                    print(f"└─ ✅ Application created successfully (without owner)")
+                                    print(f"└─ ⚠️  Note: Owner '{user_email}' was not assigned - please verify user status")
+                                    app_response = retry_response2.json()
+                                    app_id = app_response.get('id')
+                                    application_created = True
+                                except:
+                                    error_msg = f"Failed to create application even after creating user: {str(retry_error)}"
+                                    print(f"└─ ❌ {error_msg}")
+                                    log_error(
+                                        'Application Creation Failed - After User Creation',
+                                        app['AppName'],
+                                        'N/A',
+                                        f'User: {user_email}',
+                                        f'Retry error: {getattr(retry_response, "content", "No response content") if "retry_response" in locals() else "N/A"}'
+                                    )
+                        else:
+                            error_msg = f"Failed to create user: {user_email}"
+                            print(f"└─ ❌ {error_msg}")
+                            log_error(
+                                'Application Creation Failed - User Creation Failed',
+                                app['AppName'],
+                                'N/A',
+                                f'User email: {user_email}',
+                                f'Could not create user in Phoenix'
+                            )
+                        
+                    except Exception as user_creation_error:
+                        error_msg = f"Error during user creation: {str(user_creation_error)}"
+                        print(f"└─ ❌ {error_msg}")
+                        log_error(
+                            'Application Creation Failed - User Creation Error',
+                            app['AppName'],
+                            'N/A',
+                            f'User email: {user_email}',
+                            f'User creation error: {str(user_creation_error)}'
+                        )
         else:
             error_msg = f"Failed to create application: {str(e)}"
             error_details = f'Response: {getattr(response, "content", "No response content")}\nPayload: {json.dumps(payload)}'
@@ -4095,65 +4143,63 @@ def update_application_crit_owner(application, existing_application, headers2):
         # Handle invalid user email - attempt to create user and retry
         if hasattr(response, 'status_code') and response.status_code == 400 and b'Invalid user email' in response.content:
             user_email = application['Responsable']
-            print(f"└─ ⚠️  Owner '{user_email}' rejected by API")
+            print(f"└─ ⚠️  Owner '{user_email}' cannot be assigned (API rejected)")
             
             # Check if user exists and get their info
             user_info = get_user_info(user_email, headers)
             
             if user_info:
-                # User exists but API still rejects - show diagnostic info
+                # User exists but cannot be assigned as owner
                 user_role = user_info.get('role', 'N/A')
                 user_status = user_info.get('status', 'N/A')
-                phoenix_email = user_info.get('email', user_email)
                 
-                print(f"└─ 📋 User found in Phoenix:")
-                print(f"   └─ Email: {phoenix_email}")
-                print(f"   └─ Role: {user_role}")
-                print(f"   └─ Status: {user_status}")
+                if user_role in ['PLATFORM_ADMIN', 'ORG_ADMIN', 'ORGANIZATIONAL_ADMIN']:
+                    print(f"└─ 💡 User is an admin ({user_role}) - admin users cannot be application owners")
+                else:
+                    print(f"└─ 💡 User exists (Role: {user_role}, Status: {user_status}) but cannot be assigned as owner")
                 
-                # Check for email case mismatch
-                if phoenix_email.lower() == user_email.lower() and phoenix_email != user_email:
-                    print(f"└─ 💡 Email case mismatch detected!")
-                    print(f"   └─ YAML has: {user_email}")
-                    print(f"   └─ Phoenix has: {phoenix_email}")
-                    print(f"└─ 🔄 Retrying with exact Phoenix email...")
-                    
-                    # Retry with the exact email from Phoenix
-                    payload['owner'] = phoenix_email
-                    try:
-                        retry_response = requests.patch(api_url, headers=headers, json=payload)
-                        retry_response.raise_for_status()
-                        print(f"└─ ✅ Application updated successfully with corrected email")
-                        return
-                    except requests.exceptions.RequestException as retry_error:
-                        print(f"└─ ⚠️  Still failing with corrected email")
-                
-                # If status is not active, that might be the issue
-                if user_status and user_status.upper() not in ['ACTIVE', 'ENABLED']:
-                    print(f"└─ ⚠️  User status is '{user_status}' - user may need to be activated")
-                
-                # Retry without the owner field as fallback
-                print(f"└─ 🔄 Updating application without changing owner...")
+                # Retry without the owner field
                 payload_without_owner = {k: v for k, v in payload.items() if k != 'owner'}
                 try:
                     retry_response = requests.patch(api_url, headers=headers, json=payload_without_owner)
                     retry_response.raise_for_status()
-                    print(f"└─ ✅ Application updated (owner not changed)")
+                    print(f"└─ ✅ Application updated successfully (owner unchanged)")
                     return
                 except requests.exceptions.RequestException as retry_error:
-                    error_msg = f"Failed to update application: {str(retry_error)}"
+                    error_msg = f"Failed to update application even without owner: {str(retry_error)}"
                     print(f"└─ ❌ {error_msg}")
                     log_error(
-                        'Application Update Failed',
+                        'Application Update Failed - Without Owner',
                         application['AppName'],
                         'N/A',
-                        f'User: {user_email} (Role: {user_role}, Status: {user_status})',
+                        f'User: {user_email} (Role: {user_role})',
                         f'Retry error: {getattr(retry_response, "content", "No response content") if "retry_response" in locals() else "N/A"}'
                     )
                 return
             
-            # User doesn't exist in our search - try to create them
-            print(f"└─ 💡 User not found in Phoenix, creating...")
+            # User doesn't exist in our search - try to create them or update without owner
+            print(f"└─ 💡 User not found in Phoenix")
+            if not AUTO_CREATE_USERS:
+                print(f"└─ ⏭️  Auto user creation disabled — updating application without owner")
+                payload_without_owner = {k: v for k, v in payload.items() if k != 'owner'}
+                try:
+                    retry_response = requests.patch(api_url, headers=headers, json=payload_without_owner)
+                    retry_response.raise_for_status()
+                    print(f"└─ ✅ Application updated successfully (owner unchanged)")
+                    return
+                except requests.exceptions.RequestException as retry_error:
+                    error_msg = f"Failed to update application without owner: {str(retry_error)}"
+                    print(f"└─ ❌ {error_msg}")
+                    log_error(
+                        'Application Update Failed - Without Owner (Auto Create Disabled)',
+                        application['AppName'],
+                        'N/A',
+                        f'User: {user_email}',
+                        f'Retry error: {getattr(retry_response, "content", "No response content") if "retry_response" in locals() else "N/A"}'
+                    )
+                return
+
+            print(f"└─ Attempting to create user...")
             
             from .Utils import extract_user_name_from_email
             first_name, last_name = extract_user_name_from_email(user_email)
@@ -4171,12 +4217,11 @@ def update_application_crit_owner(application, existing_application, headers2):
                             return
                         except requests.exceptions.RequestException as retry_error:
                             # User exists but still can't be owner - update without owner
-                            print(f"└─ ⚠️  Owner still rejected, updating without owner change...")
                             payload_without_owner = {k: v for k, v in payload.items() if k != 'owner'}
                             try:
                                 retry_response2 = requests.patch(api_url, headers=headers, json=payload_without_owner)
                                 retry_response2.raise_for_status()
-                                print(f"└─ ✅ Application updated (owner not changed)")
+                                print(f"└─ ✅ Application updated successfully (owner unchanged)")
                                 return
                             except:
                                 pass
@@ -4282,6 +4327,124 @@ def create_component_rules(applicationName, component, headers2):
     # Handle MULTI_MultiConditionRules (the main variant used in YAML)
     if component.get('MULTI_MultiConditionRules') and is_valid_value(component.get('MULTI_MultiConditionRules')):
         create_multicondition_component_rules(applicationName, component['ComponentName'], component.get('MULTI_MultiConditionRules'), headers)
+
+def _is_valid_multicondition_value(value):
+    if value is None:
+        return False
+    if isinstance(value, str) and (not value.strip() or value.lower() == 'null'):
+        return False
+    if isinstance(value, list) and len(value) == 0:
+        return False
+    return True
+
+def _as_list(value):
+    return value if isinstance(value, list) else [value]
+
+def _normalize_repository_values(repository_names):
+    processed_repository_names = []
+    for repo_name in _as_list(repository_names):
+        if repo_name and isinstance(repo_name, str):
+            if SHORTEN_REPOSITORY_PATH:
+                processed_repository_names.append(extract_last_two_path_parts(repo_name))
+            else:
+                processed_repository_names.append(repo_name)
+    return processed_repository_names
+
+def _normalize_tag_values(tag_values):
+    tags = []
+    for tag in _as_list(tag_values):
+        if not _is_valid_multicondition_value(tag):
+            continue
+        if isinstance(tag, dict):
+            if tag.get('key') and tag.get('value'):
+                tags.append({"key": str(tag.get('key')).strip(), "value": str(tag.get('value')).strip()})
+            elif tag.get('value'):
+                tags.append({"value": str(tag.get('value')).strip()})
+            continue
+
+        tag = str(tag).strip()
+        if ':' in tag:
+            key, value = tag.split(':', 1)
+            key = key.strip()
+            value = value.strip()
+            if key and value:
+                tags.append({"key": key, "value": value})
+        else:
+            tags.append({"value": tag})
+    return tags
+
+def _format_multicondition_detail_value(value):
+    if isinstance(value, list):
+        return ','.join(_format_multicondition_detail_value(item) for item in value)
+    if isinstance(value, dict):
+        if value.get('key') and value.get('value'):
+            return f"{value.get('key')}={value.get('value')}"
+        if value.get('value'):
+            return str(value.get('value'))
+        return json.dumps(value, separators=(',', ':'))
+    return str(value)
+
+def _first_multicondition_value(multicondition, aliases):
+    for alias in aliases:
+        if alias in multicondition and _is_valid_multicondition_value(multicondition.get(alias)):
+            return multicondition.get(alias)
+    return None
+
+def _build_multicondition_negate_filter(multicondition):
+    """
+    Build filter.negateFilter from Pyrus _NOT fields.
+
+    Each mapping is (yaml_aliases, api_field, rule_name_label, value_type).
+    value_type controls normalization: tags, repository, array, or string/scalar.
+    AccountId_NOT is an alias for ProviderAccountId_NOT (same as YamlHelper for inclusion).
+    """
+    negate_filter = {}
+    negate_details = []
+
+    field_mappings = [
+        (('SearchName_NOT',), 'keyLike', 'KEY_NOT', 'string'),
+        (('RepositoryName_NOT',), 'repository', 'REPO_NOT', 'repository'),
+        # Priority order mimics the positive rules "last writer wins":
+        # Tags_rule > Tag_rule > Tags > Tag (so Tags_rule_NOT is first here).
+        (('Tags_rule_NOT', 'Tag_rule_NOT', 'Tags_NOT', 'Tag_NOT'), 'tags', 'TAGS_NOT', 'tags'),
+        (('ProviderAccountId_NOT', 'AccountId_NOT'), 'providerAccountId', 'PROVIDER_ACCOUNT_IDS_NOT', 'array'),
+        (('ProviderAccountName_NOT',), 'providerAccountName', 'PROVIDER_ACCOUNT_NAMES_NOT', 'array'),
+        (('ResourceGroup_NOT',), 'resourceGroup', 'RESOURCE_GROUPS_NOT', 'array'),
+        (('AssetType_NOT',), 'assetType', 'ASSET_NOT', 'string'),
+        (('Cidrs_NOT',), 'cidrs', 'CIDRS_NOT', 'array'),
+        (('Hostnames_NOT',), 'hostnames', 'HOSTNAMES_NOT', 'array'),
+        (('OsNames_NOT',), 'osNames', 'OS_NAMES_NOT', 'array'),
+        (('Netbios_NOT',), 'netbios', 'NETBIOS_NOT', 'array'),
+        (('Cidr_NOT',), 'cidr', 'CIDR_NOT', 'string'),
+        (('Fqdn_NOT',), 'fqdn', 'FQDN_NOT', 'array'),
+    ]
+
+    for aliases, api_field, detail_label, value_type in field_mappings:
+        raw_value = _first_multicondition_value(multicondition, aliases)
+        if raw_value is None:
+            continue
+
+        if value_type == 'tags':
+            value = _normalize_tag_values(raw_value)
+        elif value_type == 'repository':
+            value = _normalize_repository_values(raw_value)
+        elif value_type == 'array':
+            value = [item for item in _as_list(raw_value) if _is_valid_multicondition_value(item)]
+        else:
+            value = raw_value[0] if isinstance(raw_value, list) and raw_value else raw_value
+
+        if not _is_valid_multicondition_value(value):
+            continue
+
+        negate_filter[api_field] = value
+        negate_details.append(f"{detail_label}:{_format_multicondition_detail_value(value)}")
+
+    # Mirror positive `if Cidrs ... elif Cidr ...`: Cidrs_NOT takes precedence over Cidr_NOT.
+    if 'cidrs' in negate_filter and 'cidr' in negate_filter:
+        negate_filter.pop('cidr')
+        negate_details = [d for d in negate_details if not d.startswith('CIDR_NOT:')]
+
+    return negate_filter, negate_details
 
 def create_multicondition_component_rules(applicationName, componentName, multiconditionRules, headers2, component_id=None):
     global headers
@@ -4534,10 +4697,20 @@ def create_multicondition_component_rules(applicationName, componentName, multic
                         if DEBUG:
                             print(f"   └─ WARNING: All tags were filtered out, removed empty tags array from filter")
 
+                negate_filter, negate_details = _build_multicondition_negate_filter(multicondition)
+                if negate_filter:
+                    rule['filter']['negateFilter'] = negate_filter
+
                 if not rule['filter']:
                     print(f" ⚠️  Skipping MC-R {componentName} - empty filter (no valid criteria)")
                     rules_failed += 1
                     break  # Skip this rule, but continue with others
+
+                if negate_details:
+                    rule_name = f"MC-R {componentName} EXCLUDING {','.join(negate_details)}"
+                    if len(rule_name) > 255:
+                        rule_name = rule_name[:252] + "..."
+                    rule['name'] = rule_name
 
                 # ID-BASED ENDPOINT FIX: Use /v1/components/{id}/rules when ID is available
                 # This eliminates ambiguity when Application and Environment names collide
@@ -5067,6 +5240,10 @@ def create_multicondition_service_rules(environmentName, serviceName, multicondi
             rule['filter']['netbios'] = netbios_names
             filter_details.append(f"NETBIOS:{netbios_names}")
 
+        negate_filter, negate_details = _build_multicondition_negate_filter(multicondition)
+        if negate_filter:
+            rule['filter']['negateFilter'] = negate_filter
+
         if not rule['filter']:
             print(f" ⚠️  Skipping MC-R {serviceName} - empty filter (no valid criteria)")
             rules_failed += 1
@@ -5074,6 +5251,8 @@ def create_multicondition_service_rules(environmentName, serviceName, multicondi
 
         # Create descriptive rule name based on the filter type and value
         rule_name = f"MC-R-{serviceName}-{' AND '.join(filter_details)}"
+        if negate_details:
+            rule_name = f"{rule_name} EXCLUDING {','.join(negate_details)}"
         
         # Truncate rule name if too long (max 255 chars)
         if len(rule_name) > 255:
@@ -5088,6 +5267,10 @@ def create_multicondition_service_rules(environmentName, serviceName, multicondi
             print(f"   Filter details: {filter_details}")
             print(f"   Filter content:")
             print(f"      {json.dumps(rule['filter'], indent=6)}")
+            if negate_filter:
+                print(f"   Negate filter details: {negate_details}")
+                print(f"   Negate filter content:")
+                print(f"      {json.dumps(rule['filter']['negateFilter'], indent=6)}")
 
         # ID-BASED ENDPOINT FIX: Use /v1/components/{id}/rules when ID is available
         # This eliminates ambiguity when Application and Environment names collide
@@ -5739,6 +5922,10 @@ def check_and_create_missing_users(teams, all_team_access, hive_staff, access_to
         - all_team_access: list of all team access users
         - hive_staff: list of hives. Only Lead and Product users will be managed in this function
     """
+    if not AUTO_CREATE_USERS:
+        print('Skipping automatic user creation (auto_create_users=false)')
+        return
+
     global access_token
     if not access_token:
         access_token = access_token2
@@ -8274,6 +8461,11 @@ def add_service(applicationSelectorName, env_id, service, tier, headers2):
 
 @dispatch(str, str, dict, int, str, dict)
 def add_service(applicationSelectorName, env_id, service, tier, team, headers2):
+    return add_service(applicationSelectorName, env_id, service, tier, [team], headers2)
+
+
+@dispatch(str, str, dict, int, list, dict)
+def add_service(applicationSelectorName, env_id, service, tier, teams, headers2):
     """
     OPTIMIZED: Create service with team support without redundant verifications.
     Returns (success, service_id) tuple.
@@ -8286,7 +8478,7 @@ def add_service(applicationSelectorName, env_id, service, tier, team, headers2):
     print(f"\n[Service Creation]")
     print(f" └─ Environment: {applicationSelectorName}")
     print(f" └─ Service: {service_name}")
-    print(f" └─ Team: {team}")
+    print(f" └─ Teams: {teams}")
     
     try:
         # Create service payload directly (existence already checked by caller)
@@ -8297,9 +8489,12 @@ def add_service(applicationSelectorName, env_id, service, tier, team, headers2):
                 "name": applicationSelectorName,
                 "caseSensitive": False
             },
-            "tags": [{"key": "pteam", "value": team}]
+            "tags": []
         }
 
+        for team in teams:
+            payload['tags'].append({"key": "pteam", "value": team})
+        
         # Add tags from Tag_label and Tags_label fields in YAML configuration
         if service.get('Tag_label'):
             tag_label = service.get('Tag_label')
@@ -10091,6 +10286,8 @@ def create_component_rule(applicationName, componentName, filterName, filterValu
 
 
 def create_user_for_application(existing_users_emails, newly_created_users_emails, email, access_token2):
+    if not AUTO_CREATE_USERS:
+        return
     global access_token
     if not access_token:
         access_token = access_token2
@@ -10140,6 +10337,8 @@ def api_call_create_user(email, first_name, last_name, role, access_token2):
     Returns:
         str: Created user's email
     """
+    if not AUTO_CREATE_USERS:
+        return None
     global access_token
     if not access_token:
         access_token = access_token2
@@ -10409,6 +10608,8 @@ def create_user_with_role(email, first_name, last_name, role, headers2):
         role: User's role (SECURITY_CHAMPION, ENGINEERING_USER, APPLICATION_ADMIN, or ORG_USER)
         headers: Request headers containing authorization
     """
+    if not AUTO_CREATE_USERS:
+        return None
     global headers
     if not headers:
         headers = headers2
