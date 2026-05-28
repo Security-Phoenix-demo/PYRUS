@@ -7,19 +7,141 @@ Usage:
     run_autogroup(client_id, client_secret, config_path, mode='batch')
 """
 
-import os
 import sys
 import json
+import logging
 import yaml
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, TextIO
+
+
+# Dedicated logger for autogroup. We attach a per-run JSON file handler inside
+# run_autogroup() so each invocation's audit trail lives in its own folder
+# alongside the YAML artifacts. The console handler stays at WARNING by default
+# so existing human-readable print() output continues to drive interactive UX.
+_LOGGER = logging.getLogger("autogroup")
+_LOGGER.setLevel(logging.INFO)
+if not _LOGGER.handlers:
+    _console = logging.StreamHandler()
+    _console.setLevel(logging.WARNING)
+    _console.setFormatter(logging.Formatter("%(asctime)s [autogroup:%(levelname)s] %(message)s"))
+    _LOGGER.addHandler(_console)
+
+
+class _TeeStream:
+    """Mirror stdout/stderr to a log file (same pattern as batch-upload ``tee``)."""
+
+    def __init__(self, stream: TextIO, log_file: TextIO) -> None:
+        self._stream = stream
+        self._log = log_file
+
+    def write(self, data: str) -> int:
+        if not data:
+            return 0
+        self._stream.write(data)
+        self._log.write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        self._stream.flush()
+        self._log.flush()
+
+    def isatty(self) -> bool:
+        return getattr(self._stream, "isatty", lambda: False)()
+
+
+@contextmanager
+def _capture_terminal_log(run_dir: Path, enabled: bool = True):
+    """Write all autogroup ``print()`` output to ``run_dir/terminal.log``."""
+    if not enabled:
+        yield None
+        return
+
+    path = run_dir / "terminal.log"
+    with open(path, "w", encoding="utf-8") as log_fp:
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        sys.stdout = _TeeStream(old_stdout, log_fp)
+        sys.stderr = _TeeStream(old_stderr, log_fp)
+        try:
+            yield path
+        finally:
+            sys.stdout, sys.stderr = old_stdout, old_stderr
+
+
+class _JsonLineFormatter(logging.Formatter):
+    """Emit one JSON object per record so the log file is machine-parseable."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "ts": datetime.utcfromtimestamp(record.created).isoformat() + "Z",
+            "level": record.levelname,
+            "event": getattr(record, "event", record.msg if isinstance(record.msg, str) else "log"),
+        }
+        for key in ("phase", "duration_s", "input_count", "output_count", "source", "run_id", "details"):
+            if hasattr(record, key):
+                payload[key] = getattr(record, key)
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+        return json.dumps(payload, default=str)
+
+
+def _attach_run_log(run_dir: Path, run_id: str) -> logging.Handler:
+    """Attach a JSON file handler scoped to this run.
+
+    Idempotent across invocations: any FileHandler left attached from a prior
+    run_autogroup() call is detached and closed first so multi-run processes
+    do not leak handles or duplicate log lines.
+    """
+    for existing in list(_LOGGER.handlers):
+        if isinstance(existing, logging.FileHandler):
+            _LOGGER.removeHandler(existing)
+            try:
+                existing.close()
+            except Exception:
+                pass
+
+    handler = logging.FileHandler(run_dir / "autogroup.log")
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(_JsonLineFormatter())
+    _LOGGER.addHandler(handler)
+    _LOGGER.info("run_started", extra={"event": "run_started", "run_id": run_id})
+    return handler
+
+
+def _log_phase(phase: str, *, duration_s: float, input_count: Optional[int] = None,
+               output_count: Optional[int] = None, source: Optional[str] = None,
+               status: str = "success", details: Optional[Dict] = None) -> None:
+    """Structured per-phase audit event written to autogroup.log."""
+    _LOGGER.info(
+        "phase_complete",
+        extra={
+            "event": "phase_complete",
+            "phase": phase,
+            "duration_s": round(duration_s, 4),
+            "input_count": input_count,
+            "output_count": output_count,
+            "source": source,
+            "details": {"status": status, **(details or {})},
+        },
+    )
 
 from providers.AutoGroupEngine import (
-    CheckpointManager, TagAnalyzer, AssetGrouper, ComponentCreator,
+    CheckpointManager, TagAnalyzer, AssetGrouper,
     load_config, fetch_assets_from_api, load_assets_from_file, export_to_yaml,
-    generate_standard_yaml_structure
+    generate_standard_yaml_structure, create_grouping_plan,
 )
+
+
+class AutogroupEmptyResultError(RuntimeError):
+    """Raised when autogroup completes a phase with zero results and the operator did not opt in.
+
+    The historical behaviour was to emit an empty YAML and report success. That masked real
+    failures (stale checkpoints, broken API filters, no unassigned assets). We now fail loud
+    by default; set `validation.allow_empty_output: true` in the autogroup config to restore
+    the old silent behaviour.
+    """
 from providers.Phoenix import get_auth_token, populate_applications_and_environments
 from providers.YamlHelper import (
     populate_applications_from_config, populate_environments_from_env_groups_from_config,
@@ -27,7 +149,59 @@ from providers.YamlHelper import (
 )
 
 
-def run_autogroup(client_id: str, 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _resolve_output_root(output_dir: Optional[str], config: Dict) -> Path:
+    """Resolve the autogroup output root.
+
+    Precedence: explicit CLI/argument > config.output.base_dir > default 'autogroup-output'.
+    Relative paths are interpreted from the repo root, not the current working directory,
+    so the location is stable regardless of where the user launches the command from.
+    """
+    base = output_dir or config.get('output', {}).get('base_dir', 'autogroup-output')
+    base_path = Path(base)
+    if not base_path.is_absolute():
+        base_path = (REPO_ROOT / base_path).resolve()
+    return base_path
+
+
+def _try_resume_assets(resume_manager: Optional[CheckpointManager], checkpoint_file: str,
+                       mode: str, max_age_hours: float, allow_empty: bool) -> Optional[Tuple[List, Dict]]:
+    """Return (assets, tag_analysis) from the newest usable checkpoint, or None to fetch fresh.
+
+    "Usable" means all of: a reader exists, the checkpoint file is present, it is younger
+    than max_age_hours, the operator consents (automatic in batch mode), it loads cleanly,
+    and - unless allow_empty is set - it carries at least one asset. That last empty-asset
+    guard is what stops a single failed fetch from poisoning every later run with an empty
+    checkpoint (the historical silent empty-YAML regression).
+    """
+    if resume_manager is None or not resume_manager.checkpoint_exists(checkpoint_file):
+        return None
+
+    age = resume_manager.get_checkpoint_age(checkpoint_file)
+    if not age or age.total_seconds() / 3600 >= max_age_hours:
+        print(f"⚠️  Checkpoint too old (age: {age}), fetching fresh data")
+        return None
+
+    print(f"📌 Found recent checkpoint (age: {age})")
+    if mode != 'batch' and not _confirm("Resume from checkpoint?"):
+        return None
+
+    checkpoint_data = resume_manager.load_checkpoint(checkpoint_file)
+    if not checkpoint_data:
+        return None
+
+    assets = checkpoint_data.get('assets', [])
+    tag_analysis = checkpoint_data.get('tag_analysis', {})
+    if not assets and not allow_empty:
+        print("⚠️  Refusing to resume from empty checkpoint (asset_count=0). Forcing fresh fetch.")
+        return None
+
+    return assets, tag_analysis
+
+
+def run_autogroup(client_id: str,
                   client_secret: str,
                   config_path: str,
                   mode: str = 'batch',
@@ -35,7 +209,8 @@ def run_autogroup(client_id: str,
                   asset_file: str = None,
                   action_teams: bool = False,
                   action_code: bool = False,
-                  action_cloud: bool = False) -> Dict:
+                  action_cloud: bool = False,
+                  output_dir: Optional[str] = None) -> Dict:
     """
     Main orchestration function for automatic asset grouping
     
@@ -58,11 +233,74 @@ def run_autogroup(client_id: str,
         action_teams: Create/assign teams (default: False)
         action_code: Implement CODE-related components (default: False)
         action_cloud: Implement CLOUD-related components (default: False)
+        output_dir: Output root for run artifacts. Overrides config.output.base_dir.
+            Default: <repo_root>/autogroup-output. Each invocation creates a
+            timestamped subfolder inside the root.
     
     Returns:
         Dict with execution results and statistics
     """
-    
+    # ========================================================================
+    # PHASE 0: INITIALIZATION (config + run folder before any console output)
+    # ========================================================================
+
+    config = load_config(config_path)
+
+    if mode:
+        config['execution']['mode'] = mode
+    if asset_source:
+        config['execution']['asset_source'] = asset_source
+    if asset_file:
+        config['execution']['asset_file'] = asset_file
+
+    output_root = _resolve_output_root(output_dir, config)
+    base_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    run_dir = output_root / base_timestamp
+    _collision = 1
+    while run_dir.exists():
+        run_dir = output_root / f"{base_timestamp}_{_collision:02d}"
+        _collision += 1
+    run_dir.mkdir(parents=True, exist_ok=True)
+    run_timestamp = run_dir.name
+
+    capture_terminal = config.get('output', {}).get('capture_terminal_log', True)
+
+    with _capture_terminal_log(run_dir, enabled=capture_terminal):
+        return _run_autogroup_body(
+            client_id=client_id,
+            client_secret=client_secret,
+            config_path=config_path,
+            config=config,
+            mode=mode,
+            asset_source=asset_source,
+            asset_file=asset_file,
+            action_teams=action_teams,
+            action_code=action_code,
+            action_cloud=action_cloud,
+            run_dir=run_dir,
+            run_timestamp=run_timestamp,
+            output_root=output_root,
+        )
+
+
+def _run_autogroup_body(
+    *,
+    client_id: str,
+    client_secret: str,
+    config_path: str,
+    config: Dict,
+    mode: str,
+    asset_source: Optional[str],
+    asset_file: Optional[str],
+    action_teams: bool,
+    action_code: bool,
+    action_cloud: bool,
+    run_dir: Path,
+    run_timestamp: str,
+    output_root: Path,
+) -> Dict:
+    """Autogroup phases 0–5; stdout/stderr are tee'd by the caller when enabled."""
+
     print("\n" + "="*80)
     print("🚀 PHOENIX SECURITY - AUTOMATIC ASSET GROUPING")
     print("="*80)
@@ -71,54 +309,72 @@ def run_autogroup(client_id: str,
     print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"\n🎯 Action Flags:")
     print(f"   • Teams: {'✅ Enabled' if action_teams else '❌ Disabled'}")
-    print(f"   • Code: {'✅ Enabled' if action_code else '❌ Disabled'}")
+    print(f"   • Code:  {'✅ Enabled' if action_code else '❌ Disabled'}")
     print(f"   • Cloud: {'✅ Enabled' if action_cloud else '❌ Disabled'}")
-    
-    # Determine operation mode
+
     implementation_enabled = action_teams or action_code or action_cloud
     if not implementation_enabled:
         print(f"\n📝 OPERATION MODE: Generate YAML Only (no implementation)")
     else:
         print(f"\n🚀 OPERATION MODE: Generate YAML + Implement")
-    
+
     print("="*80)
-    
-    # ========================================================================
-    # PHASE 0: INITIALIZATION
-    # ========================================================================
-    
-    # Load configuration
-    config = load_config(config_path)
-    
-    # Override mode if specified
-    if mode:
-        config['execution']['mode'] = mode
-    
-    # Override asset source if specified
-    if asset_source:
-        config['execution']['asset_source'] = asset_source
-    if asset_file:
-        config['execution']['asset_file'] = asset_file
-    
-    # Setup checkpoint manager
-    config_dir = Path(config_path).parent
-    checkpoint_folder = config_dir / config.get('checkpoint', {}).get('folder', 'checkpoints')
-    checkpoint_manager = CheckpointManager(str(checkpoint_folder))
-    
+    print(f"📁 Run output: {run_dir}")
+    print(f"📝 Terminal log: {run_dir / 'terminal.log'}")
+
+    checkpoint_folder_name = config.get('checkpoint', {}).get('folder', 'checkpoints')
+    # Checkpoint writer: always anchored under this run's folder.
+    checkpoint_manager = CheckpointManager(str(run_dir / checkpoint_folder_name))
+
+    # Checkpoint reader for resume: the most recent prior run that actually has
+    # checkpoint files. Decoupled from the writer so a clean new run never inherits
+    # the previous run's empty/stale outputs.
+    resume_manager: Optional[CheckpointManager] = None
+    if config.get('checkpoint', {}).get('enabled', True) and config.get('execution', {}).get('resume_from_checkpoint', True):
+        candidate_runs = sorted(
+            [p for p in output_root.glob('*') if p.is_dir() and p != run_dir],
+            reverse=True,
+        )
+        for candidate in candidate_runs:
+            cp_dir = candidate / checkpoint_folder_name
+            if cp_dir.is_dir() and any(cp_dir.iterdir()):
+                resume_manager = CheckpointManager(str(cp_dir))
+                break
+
+    run_log_handler = _attach_run_log(run_dir, run_timestamp)
+
     # Initialize results tracking
     results = {
         'started_at': datetime.now().isoformat(),
         'config_path': config_path,
+        'output_dir': str(run_dir),
+        'terminal_log': str(run_dir / 'terminal.log'),
+        'run_id': run_timestamp,
         'mode': config['execution']['mode'],
         'phases': {},
         'statistics': {},
         'errors': []
     }
     
-    # Get auth token and headers
-    access_token = get_auth_token(client_id, client_secret)
-    headers = {"Authorization": f"Bearer {access_token}"}
-    
+    # Auth is only required for the API asset source or for any implementation
+    # phase (action_teams / action_code / action_cloud). A pure file-mode
+    # generate-only run produces YAML offline and should not need credentials,
+    # so we skip the token call in that case.
+    resolved_asset_source = (asset_source or config.get('execution', {}).get('asset_source', 'api')).lower()
+    needs_auth = resolved_asset_source != 'file' or implementation_enabled
+    if needs_auth:
+        if not client_id or not client_secret:
+            raise ValueError(
+                "client_id and client_secret are required when asset_source is 'api' "
+                "or when any --action_* flag is set."
+            )
+        access_token = get_auth_token(client_id, client_secret)
+        headers = {"Authorization": f"Bearer {access_token}"}
+    else:
+        access_token = None
+        headers = {}
+        print("\nℹ️  File mode + generate-only: skipping Phoenix API auth")
+
     print("\n✅ Initialization complete")
     
     # ========================================================================
@@ -131,58 +387,71 @@ def run_autogroup(client_id: str,
     
     phase_start = datetime.now()
     
-    # Check for checkpoint
+    # Resume from the most recent prior run's checkpoint when one is usable; otherwise
+    # fetch fresh. _try_resume_assets owns the age / empty-guard / confirm checks and
+    # returns None to mean "no usable checkpoint - fetch fresh".
     checkpoint_file = config.get('checkpoint', {}).get('tag_analysis_file', 'checkpoint-01-tag-analysis.json')
-    can_resume = config.get('checkpoint', {}).get('enabled', True) and config.get('execution', {}).get('resume_from_checkpoint', True)
-    
-    if can_resume and checkpoint_manager.checkpoint_exists(checkpoint_file):
-        age = checkpoint_manager.get_checkpoint_age(checkpoint_file)
-        max_age_hours = config.get('checkpoint', {}).get('max_checkpoint_age_hours', 168)
-        
-        if age and age.total_seconds() / 3600 < max_age_hours:
-            print(f"📌 Found recent checkpoint (age: {age})")
-            
-            if mode == 'batch' or _confirm("Resume from checkpoint?"):
-                checkpoint_data = checkpoint_manager.load_checkpoint(checkpoint_file)
-                if checkpoint_data:
-                    assets = checkpoint_data.get('assets', [])
-                    tag_analysis = checkpoint_data.get('tag_analysis', {})
-                    print(f"✅ Resumed from checkpoint: {len(assets):,} assets loaded")
-                    results['phases']['asset_loading'] = {
-                        'status': 'resumed_from_checkpoint',
-                        'asset_count': len(assets),
-                        'duration_seconds': (datetime.now() - phase_start).total_seconds()
-                    }
-                    goto_phase_2 = True
-                else:
-                    goto_phase_2 = False
-            else:
-                goto_phase_2 = False
-        else:
-            print(f"⚠️  Checkpoint too old (age: {age}), fetching fresh data")
-            goto_phase_2 = False
+    allow_empty_resume = config.get('validation', {}).get('allow_empty_output', False)
+    max_age_hours = config.get('checkpoint', {}).get('max_checkpoint_age_hours', 168)
+
+    resumed = _try_resume_assets(resume_manager, checkpoint_file, mode, max_age_hours, allow_empty_resume)
+
+    if resumed is not None:
+        assets, tag_analysis = resumed
+        analyzer = TagAnalyzer(assets)
+        analyzer.load_stats_from_analysis(tag_analysis)
+        print(f"✅ Resumed from checkpoint: {len(assets):,} assets loaded")
+        results['phases']['asset_loading'] = {
+            'status': 'resumed_from_checkpoint',
+            'asset_count': len(assets),
+            'duration_seconds': (datetime.now() - phase_start).total_seconds(),
+        }
+        _log_phase(
+            'asset_loading',
+            duration_s=results['phases']['asset_loading']['duration_seconds'],
+            output_count=len(assets),
+            source='checkpoint',
+            status='resumed_from_checkpoint',
+        )
     else:
-        goto_phase_2 = False
-    
-    if not goto_phase_2:
-        # Fetch fresh assets
-        asset_source = config['execution'].get('asset_source', 'api')
-        
-        if asset_source == 'file':
+        # Fetch fresh assets. resolved_asset_source was computed once during init
+        # (lowercased), so file/api routing here matches the earlier auth decision.
+        if resolved_asset_source == 'file':
             asset_file_path = config['execution'].get('asset_file', 'example-data/assets.json')
-            # Make path relative to Python script folder
-            script_dir = Path(__file__).parent.parent
-            asset_file_full = script_dir / asset_file_path
-            assets = load_assets_from_file(str(asset_file_full))
+            assets = load_assets_from_file(str(REPO_ROOT / asset_file_path))
         else:
             assets = fetch_assets_from_api(client_id, client_secret, config)
-        
+
         results['phases']['asset_loading'] = {
             'status': 'success',
             'asset_count': len(assets),
-            'source': asset_source,
+            'source': resolved_asset_source,
             'duration_seconds': (datetime.now() - phase_start).total_seconds()
         }
+        _log_phase(
+            'asset_loading',
+            duration_s=results['phases']['asset_loading']['duration_seconds'],
+            output_count=len(assets),
+            source=resolved_asset_source,
+            status='success' if assets else 'empty',
+        )
+
+        # Loud-fail on zero assets: this is the single most common silent-failure mode
+        # (stale token, wrong API filter, empty tenant). Operators must opt in to empty
+        # runs via validation.allow_empty_output.
+        if not assets:
+            msg = (
+                f"Phase 1 loaded 0 assets from {resolved_asset_source!r}. "
+                "Common causes: wrong --api_domain/credentials, invalid /v1/assets search "
+                "body (fixed in current engine - use per-type requests), empty tenant, "
+                "or wrong asset_file path when asset_source=file."
+            )
+            print(f"\n❌ {msg}")
+            if not allow_empty_resume:
+                results['errors'].append(msg)
+                results['phases']['asset_loading']['status'] = 'empty'
+                raise AutogroupEmptyResultError(msg)
+            print("   (validation.allow_empty_output is true - continuing anyway)")
         
         # Perform tag analysis
         print("\n" + "="*80)
@@ -190,7 +459,10 @@ def run_autogroup(client_id: str,
         print("="*80)
         
         analyzer = TagAnalyzer(assets)
-        tag_analysis = analyzer.analyze()
+        # Cache lives at the output_root (shared across runs) so identical asset sets
+        # don't recompute tag analysis on every invocation.
+        tag_cache_dir = output_root / '.cache' / 'tag-analysis'
+        tag_analysis = analyzer.analyze(cache_dir=tag_cache_dir)
         analyzer.print_analysis(tag_analysis)
         
         # Save checkpoint
@@ -204,8 +476,8 @@ def run_autogroup(client_id: str,
         
         # Export tag analysis if configured
         if config.get('output', {}).get('export_tag_analysis', True):
-            output_path = config_dir / config['output']['tag_analysis_path'].replace(
-                '{timestamp}', datetime.now().strftime('%Y%m%d_%H%M%S')
+            output_path = run_dir / config['output']['tag_analysis_path'].replace(
+                '{timestamp}', run_timestamp
             )
             with open(output_path, 'w') as f:
                 json.dump(tag_analysis, f, indent=2)
@@ -221,21 +493,8 @@ def run_autogroup(client_id: str,
     
     phase_start = datetime.now()
     
-    # Determine grouping tags
-    analyzer = TagAnalyzer(assets)
-    
-    # If tag_analysis was loaded from checkpoint, reconstruct tag_stats
-    if tag_analysis and 'tags_by_coverage' in tag_analysis:
-        # Reconstruct tag_stats from tags_by_coverage
-        for tag_info in tag_analysis['tags_by_coverage']:
-            tag_key = tag_info['key']
-            analyzer.tag_stats[tag_key] = {
-                'count': tag_info['asset_count'],
-                'coverage': tag_info['coverage_percent'],
-                'unique_values': tag_info['unique_values'],
-                'most_common': tag_info['most_common_values']
-            }
-    
+    # analyzer already carries tag_stats - from the fresh analyze() above or, on a
+    # resumed run, from load_stats_from_analysis() - so this works for both paths.
     recommended_tags = analyzer.recommend_grouping_tags(config)
     
     print(f"\n📊 Recommended grouping tags: {', '.join(recommended_tags[:5])}")
@@ -344,15 +603,42 @@ def run_autogroup(client_id: str,
     
     # Combine all groups
     all_groups = {**tagged_groups, **untagged_groups}
-    
+
     print(f"\n✅ Grouping complete:")
     print(f"   Tagged groups: {len(tagged_groups)}")
     print(f"   Untagged groups: {len(untagged_groups)}")
     print(f"   Total groups: {len(all_groups)}")
-    
-    # Create grouping plan
-    grouping_plan = _create_grouping_plan(all_groups, config, primary_tag, secondary_tag)
-    
+
+    # Empty-output safeguard: Phase 3 producing zero groups means there is nothing to
+    # emit and any downstream YAML will be empty. Historically this was reported as
+    # "success" - we now treat it as a hard failure unless the operator opts in.
+    if not all_groups and not allow_empty_resume:
+        msg = (
+            f"Phase 3 produced 0 groups from {len(assets)} assets. "
+            "Either all assets fell below min_assets_per_component, or the grouping "
+            "configuration filtered everything out."
+        )
+        print(f"\n❌ {msg}")
+        results['errors'].append(msg)
+        results['phases']['grouping'] = {
+            'status': 'empty',
+            'tagged_groups': 0,
+            'untagged_groups': 0,
+            'total_groups': 0,
+            'duration_seconds': (datetime.now() - phase_start).total_seconds(),
+        }
+        _log_phase(
+            'grouping',
+            duration_s=results['phases']['grouping']['duration_seconds'],
+            input_count=len(assets),
+            output_count=0,
+            status='empty',
+        )
+        raise AutogroupEmptyResultError(msg)
+
+    # Create grouping plan (shared with the synthetic regression test via the engine)
+    grouping_plan = create_grouping_plan(all_groups, config, primary_tag, secondary_tag)
+
     results['phases']['grouping'] = {
         'status': 'success',
         'tagged_groups': len(tagged_groups),
@@ -360,6 +646,14 @@ def run_autogroup(client_id: str,
         'total_groups': len(all_groups),
         'duration_seconds': (datetime.now() - phase_start).total_seconds()
     }
+    _log_phase(
+        'grouping',
+        duration_s=results['phases']['grouping']['duration_seconds'],
+        input_count=len(assets),
+        output_count=len(all_groups),
+        status='success',
+        details={'tagged': len(tagged_groups), 'untagged': len(untagged_groups)},
+    )
     
     # Save grouping plan checkpoint
     if config.get('checkpoint', {}).get('enabled', True):
@@ -368,8 +662,8 @@ def run_autogroup(client_id: str,
     
     # Export grouping plan if configured
     if config.get('output', {}).get('export_grouping_plan', True):
-        output_path = config_dir / config['output']['grouping_plan_path'].replace(
-            '{timestamp}', datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_path = run_dir / config['output']['grouping_plan_path'].replace(
+            '{timestamp}', run_timestamp
         )
         export_to_yaml(grouping_plan, str(output_path))
     
@@ -388,8 +682,8 @@ def run_autogroup(client_id: str,
     
     # Save generated YAML
     yaml_config = config.get('yaml_generation', {})
-    yaml_output_path = config_dir / yaml_config.get('output_path', 'generated-structure-{timestamp}.yaml').replace(
-        '{timestamp}', datetime.now().strftime('%Y%m%d_%H%M%S')
+    yaml_output_path = run_dir / yaml_config.get('output_path', 'core-structure-{timestamp}.yaml').replace(
+        '{timestamp}', run_timestamp
     )
     
     export_to_yaml(yaml_structure, str(yaml_output_path))
@@ -403,6 +697,20 @@ def run_autogroup(client_id: str,
         'environment_groups': len(yaml_structure.get('EnvironmentGroups', [])),
         'duration_seconds': (datetime.now() - phase_start).total_seconds()
     }
+    _log_phase(
+        'yaml_generation',
+        duration_s=results['phases']['yaml_generation']['duration_seconds'],
+        input_count=len(all_groups),
+        output_count=(
+            len(yaml_structure.get('DeploymentGroups', []))
+            + len(yaml_structure.get('EnvironmentGroups', []))
+        ),
+        details={
+            'deployment_groups': len(yaml_structure.get('DeploymentGroups', [])),
+            'environment_groups': len(yaml_structure.get('EnvironmentGroups', [])),
+            'output_file': str(yaml_output_path),
+        },
+    )
     
     # Preview in interactive mode
     if mode == 'interactive':
@@ -615,6 +923,19 @@ def run_autogroup(client_id: str,
         **implementation_stats,
         'duration_seconds': (datetime.now() - phase_start).total_seconds()
     }
+    _log_phase(
+        'implementation',
+        duration_s=results['phases']['implementation']['duration_seconds'],
+        status=results['phases']['implementation']['status'],
+        details={
+            'teams_created': implementation_stats['teams_created'],
+            'applications_created': implementation_stats['applications_created'],
+            'components_created': implementation_stats['components_created'],
+            'environments_created': implementation_stats['environments_created'],
+            'services_created': implementation_stats['services_created'],
+            'failed': implementation_stats['failed'],
+        },
+    )
     
     print(f"\n✅ Implementation complete:")
     print(f"   • Teams: {implementation_stats['teams_created']}")
@@ -635,8 +956,8 @@ def run_autogroup(client_id: str,
     
     # Export created components
     if config.get('output', {}).get('export_yaml', True):
-        output_path = config_dir / config['output']['yaml_output_path'].replace(
-            '{timestamp}', datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_path = run_dir / config['output']['yaml_output_path'].replace(
+            '{timestamp}', run_timestamp
         )
         
         export_data = {
@@ -672,8 +993,8 @@ def run_autogroup(client_id: str,
     
     # Export report
     if config.get('output', {}).get('generate_report', True):
-        report_path = config_dir / config['output']['report_path'].replace(
-            '{timestamp}', datetime.now().strftime('%Y%m%d_%H%M%S')
+        report_path = run_dir / config['output']['report_path'].replace(
+            '{timestamp}', run_timestamp
         )
         
         with open(report_path, 'w') as f:
@@ -685,89 +1006,6 @@ def run_autogroup(client_id: str,
     _print_final_summary(results)
     
     return results
-
-
-def _create_grouping_plan(groups: Dict, config: Dict, primary_tag: str, secondary_tag: str) -> Dict:
-    """Create execution plan from groups"""
-    plan = {
-        'metadata': {
-            'created_at': datetime.now().isoformat(),
-            'primary_tag': primary_tag,
-            'secondary_tag': secondary_tag
-        },
-        'groups': {}
-    }
-    
-    min_assets = config.get('grouping', {}).get('min_assets_per_component', 2)
-    
-    for group_key, group_data in groups.items():
-        if isinstance(group_data, dict):
-            assets = group_data['assets']
-            metadata = group_data.get('metadata', {})
-        else:
-            assets = group_data
-            metadata = {}
-        
-        # Skip groups with too few assets
-        if len(assets) < min_assets:
-            continue
-        
-        # Determine application and component names
-        app_name, component_name = _generate_names(group_key, metadata, config)
-        
-        plan['groups'][group_key] = {
-            'application_name': app_name,
-            'component_name': component_name,
-            'asset_count': len(assets),
-            'assets': assets,
-            'metadata': metadata
-        }
-    
-    return plan
-
-
-def _generate_names(group_key: str, metadata: Dict, config: Dict) -> Tuple[str, str]:
-    """Generate application and component names from group data"""
-    primary_value = metadata.get('primary_value', group_key)
-    secondary_value = metadata.get('secondary_value')
-    
-    # Application name (use primary value)
-    app_name = primary_value.replace(' ', '-').replace('_', '-')[:100]
-    
-    # Component name
-    template = config.get('component_naming', {}).get('default_template', 'application_with_team')
-    
-    if template == 'application_with_team' and secondary_value and secondary_value != 'NoTeam':
-        component_name = f"{app_name}-{secondary_value}".replace(' ', '-')[:100]
-    elif template == 'application_only':
-        component_name = f"{app_name}-Component"[:100]
-    else:
-        # Use group key as fallback
-        component_name = group_key.replace('|||', '-')[:100]
-    
-    # Apply prefix/suffix
-    prefix = config.get('component_naming', {}).get('prefix', '')
-    suffix = config.get('component_naming', {}).get('suffix', '')
-    
-    component_name = f"{prefix}{component_name}{suffix}"
-    
-    return app_name, component_name
-
-
-def _create_application(app_name: str, config: Dict, headers: Dict):
-    """Create application if it doesn't exist"""
-    from providers.Phoenix import create_application
-    
-    app_config = {
-        'AppName': app_name,
-        'Status': 'Production',
-        'Responsable': config.get('application', {}).get('defaults', {}).get('responsable', 'admin@phoenix.security'),
-        'Tier': config.get('application', {}).get('defaults', {}).get('tier', 5),
-        'TeamNames': [],
-        'Components': []
-    }
-    
-    create_application(app_config, headers)
 
 
 def _print_grouping_preview(plan: Dict):
@@ -833,20 +1071,24 @@ def _confirm(message: str) -> bool:
 
 
 if __name__ == "__main__":
-    # Example usage
-    import sys
-    
+    # Minimal CLI shim. The primary entry point is run-phx.py --action_autogroup;
+    # this exists for quick manual invocation. With no action flags it runs in
+    # generate-only mode, so statistics stays empty until an implementation phase runs.
     if len(sys.argv) < 4:
         print("Usage: python autogroup_orchestrator.py <client_id> <client_secret> <config_path> [mode]")
         sys.exit(1)
-    
+
     client_id = sys.argv[1]
     client_secret = sys.argv[2]
     config_path = sys.argv[3]
     mode = sys.argv[4] if len(sys.argv) > 4 else 'batch'
-    
+
     results = run_autogroup(client_id, client_secret, config_path, mode)
-    
+
+    stats = results.get('statistics') or {}
     print(f"\n✅ Execution completed!")
-    print(f"   Components created: {results['statistics']['components_created']}")
+    if results.get('yaml_only_mode') or not stats:
+        print(f"   Generate-only mode - YAML written to: {results.get('output_dir', '?')}")
+    else:
+        print(f"   Components created: {stats.get('components_created', 0)}")
 

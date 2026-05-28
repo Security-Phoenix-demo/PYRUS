@@ -1,0 +1,161 @@
+[
+  {
+    "assetName": "ec2-checkout-prod-01",
+    "type": "CLOUD",
+    "cloudProvider": "AWS",
+    "account": "111122223333",
+    "region": "us-east-1",
+    "tags": [
+      {"key": "Application", "value": "Checkout"},
+      {"key": "Team", "value": "checkout-team"},
+      {"key": "BU", "value": "Payments"},
+      {"key": "Status", "value": "Production"},
+      {"key": "Environment", "value": "production"}
+    ]
+  },
+  {
+    "assetName": "ec2-checkout-prod-02",
+    "type": "CLOUD",
+    "cloudProvider": "AWS",
+    "account": "111122223333",
+    "region": "us-east-1",
+    "tags": [
+      {"key": "Application", "value": "Checkout"},
+      {"key": "Team", "value": "checkout-team"},
+      {"key": "BU", "value": "Payments"},
+      {"key": "Status", "value": "Production"},
+      {"key": "Environment", "value": "production"}
+    ]
+  },
+  {
+    "assetName": "s3-bucket-billing-archive",
+    "type": "CLOUD",
+    "cloudProvider": "AWS",
+    "account": "111122223333",
+    "region": "us-east-1",
+    "tags": [
+      {"key": "Application", "value": "Billing"},
+      {"key": "Team", "value": "billing-team"},
+      {"key": "BU", "value": "Finance"},
+      {"key": "Status", "value": "Production"},
+      {"key": "Environment", "value": "production"}
+    ]
+  },
+  {
+    "assetName": "vm-billing-batch-westeurope",
+    "type": "CLOUD",
+    "cloudProvider": "Azure",
+    "account": "44445555-6666-7777-8888-999900001111",
+    "region": "westeurope",
+    "tags": [
+      {"key": "Application", "value": "Billing"},
+      {"key": "Team", "value": "billing-team"},
+      {"key": "BU", "value": "Finance"},
+      {"key": "Status", "value": "Production"},
+      {"key": "Environment", "value": "production"}
+    ]
+  },
+  {
+    "assetName": "checkout-api",
+    "type": "CONTAINER",
+    "imageName": "checkout-api:1.4.2",
+    "tags": [
+      {"key": "Application", "value": "Checkout"},
+      {"key": "Team", "value": "checkout-team"},
+      {"key": "ComponentType", "value": "service,backend"}
+    ]
+  },
+  {
+    "assetName": "checkout-worker",
+    "type": "CONTAINER",
+    "imageName": "checkout-worker:1.4.2",
+    "tags": [
+      {"key": "Application", "value": "Checkout"},
+      {"key": "Team", "value": "checkout-team"},
+      {"key": "ComponentType", "value": "service,backend"}
+    ]
+  },
+  {
+    "assetName": "orphan-container",
+    "type": "CONTAINER",
+    "imageName": "legacy-payment-gateway:0.9.1"
+  },
+  {
+    "assetName": "host-billing-db-01",
+    "type": "INFRA",
+    "ip": "10.22.3.14",
+    "hostname": "billing-db-01.internal",
+    "tags": [
+      {"key": "Application", "value": "Billing"},
+      {"key": "Team", "value": "billing-team"},
+      {"key": "Environment", "value": "production"}
+    ]
+  },
+  {
+    "assetName": "host-billing-db-02",
+    "type": "INFRA",
+    "ip": "10.22.3.15",
+    "hostname": "billing-db-02.internal"
+  },
+  {
+    "assetName": "host-legacy-payments-01",
+    "type": "INFRA",
+    "ip": "10.50.7.4",
+    "hostname": "legacy-payments-01"
+  },
+  {
+    "assetName": "checkout-service",
+    "type": "REPOSITORY",
+    "repository": "acme/checkout-service",
+    "tags": [
+      {"key": "Application", "value": "Checkout"},
+      {"key": "Team", "value": "checkout-team"},
+      {"key": "ComponentType", "value": "service,backend"}
+    ]
+  },
+  {
+    "assetName": "checkout-worker-repo",
+    "type": "REPOSITORY",
+    "repository": "acme/checkout-worker",
+    "tags": [
+      {"key": "Application", "value": "Checkout"},
+      {"key": "Team", "value": "checkout-team"},
+      {"key": "ComponentType", "value": "service,backend"}
+    ]
+  },
+  {
+    "assetName": "billing-engine",
+    "type": "REPOSITORY",
+    "repository": "acme/billing-engine",
+    "tags": [
+      {"key": "Application", "value": "Billing"},
+      {"key": "Team", "value": "billing-team"},
+      {"key": "ComponentType", "value": "service,backend"}
+    ]
+  },
+  {
+    "assetName": "checkout-web",
+    "type": "WEB",
+    "tags": [
+      {"key": "Application", "value": "Checkout"},
+      {"key": "Team", "value": "checkout-team"},
+      {"key": "BU", "value": "Payments"},
+      {"key": "Environment", "value": "production"}
+    ]
+  },
+  {
+    "assetName": "checkout-api-public",
+    "type": "WEBSITE_API",
+    "tags": [
+      {"key": "Application", "value": "Checkout"},
+      {"key": "Team", "value": "checkout-team"},
+      {"key": "BU", "value": "Payments"},
+      {"key": "Environment", "value": "production"}
+    ]
+  },
+  {
+    "assetName": "legacy-reporting-tool",
+    "type": "REPOSITORY",
+    "repository": "acme/legacy-reporting-tool"
+  }
+]
