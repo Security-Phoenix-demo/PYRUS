@@ -8,9 +8,10 @@ multipledispatch = "*"
 pyyaml = "*"
 email-validator = "*"
 levenshtein = "==0.25.1"
-GitPython = "*"
-requests = ">=2.32.4"  # SECURITY: Fix CVE-2024-47081 (.netrc credentials leak)
-urllib3 = ">=2.6.0"  # SECURITY: Fix CVE-2025-66418, CVE-2025-66471 (decompression chain attacks)
+GitPython = ">=3.1.60"  # SECURITY: git option-injection / path-traversal / config-injection chain (GHSA-rpm5-65cw-6hj4, GHSA-x2qx-6953-8485, GHSA-7545-fcxq-7j24, GHSA-v87r-6q3f-2j67, GHSA-mv93-w799-cj2w, GHSA-956x-8gvw-wg5v, GHSA-2f96-g7mh-g2hx, GHSA-rwj8-pgh3-r573, GHSA-3rp5-jjmw-4wv2, GHSA-fjr4-x663-mwxc, GHSA-6p8h-3wgx-97gf, GHSA-r9mr-m37c-5fr3, GHSA-94p4-4cq8-9g67, GHSA-3f7w-8rr8-f37f, GHSA-539m-9xh6-q6rr, GHSA-p538-c434-8v24, GHSA-4gmw-gg2m-w46p, GHSA-9rj7-rf2p-w77r, GHSA-hh9p-6wh2-4mfc, GHSA-hmq2-w58f-27jc, GHSA-jm78-9fvv-mhgr, GHSA-wvpp-8hx9-p66j)
+requests = ">=2.34.2"  # SECURITY: Fix CVE-2026-25645 / GHSA-gc5v-m9x4-r6x2 (extract_zipped_paths insecure temp file reuse)
+urllib3 = ">=2.7.0"  # SECURITY: Fix GHSA-mf9v-mfxr-j63j (streaming decompression-bomb bypass), GHSA-qccp-gfcp-xxvc (sensitive headers across origins on proxied redirects)
+idna = ">=3.19"  # SECURITY: Fix GHSA-65pc-fj4g-8rjx (idna.encode() bypass of the CVE-2024-3651 fix)
 
 [dev-packages]
 
