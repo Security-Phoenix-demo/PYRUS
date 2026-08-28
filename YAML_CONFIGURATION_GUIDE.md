@@ -22,7 +22,7 @@ The Phoenix Security YAML configuration file defines applications, components, e
 ```yaml
 # Optional: Global access accounts
 AllAccessAccounts:
- - ciso@company.com
+ - user@example.com
 
 # Main application definitions
 DeploymentGroups:
@@ -52,6 +52,9 @@ ConfigFiles:
 # GitHub repository configurations (optional)
 GitHubRepositories:
   - https://github.com/org/config-repo
+
+# Flag controlling the experimental feature - autodetection of config files in GitHub repos
+EnableGitHubAutoDetectConfig: True
 
 # GitHub configuration settings
 GitHubRepoFolder: /path/to/local/repos
@@ -128,7 +131,7 @@ DeploymentGroups:
     Domain: E-Commerce
     SubDomain: Customer Portal
     ReleaseDefinitions: []
-    Responsable: owner@company.com
+    Responsable: user@example.com
     Tier: 2
     Deployment_set: web-services
     Ticketing:
@@ -219,7 +222,7 @@ Environment Groups:
   - Name: Production-Cloud
     Type: CLOUD
     Status: Production
-    Responsable: cloudops@company.com
+    Responsable: user@example.com
     Tier: 1
     TeamName: CloudOps
     Services:
@@ -253,9 +256,9 @@ Services focus on infrastructure and operational assets and can match using:
 - `Netbios`: List of NetBIOS names
 - `OsNames`: List of operating system names
 - `Hostnames`: List of hostnames
-- `ProviderAccountId`: List of cloud provider account IDs
-- `ProviderAccountName`: List of cloud provider account names
-- `ResourceGroup`: List of resource group names
+- `ProviderAccountId`: **List** of cloud provider account IDs (MUST be a list, not a string)
+- `ProviderAccountName`: **List** of cloud provider account names
+- `ResourceGroup`: **List** of resource group names
 
 **Note**: Services should focus on infrastructure assets like containers, cloud resources, and physical infrastructure.
 
@@ -368,6 +371,30 @@ This would read Search asset service123 AND search system with tags tag:system12
 
 ### Data Types and Formats
 
+#### Field Type Reference Table
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `AppName` | String | Required, unique identifier |
+| `ComponentName` | String | Required, unique within application |
+| `Service` | String | Required, service identifier |
+| `SearchName` | String | Search pattern for asset matching |
+| `Cidr` | String | Network CIDR block |
+| `Tier` | Integer | 1-10, criticality level |
+| `AppID` | Integer | Auto-assigned |
+| `AutomaticSecurityReview` | Boolean | true/false |
+| `TeamNames` | **List** | List of team names |
+| `Tags` | **List** | List of tag values for matching |
+| `Tags_label` | **List** | List of metadata labels |
+| `Fqdn` | **List** | List of FQDNs |
+| `Hostnames` | **List** | List of hostnames |
+| `OsNames` | **List** | List of OS names |
+| `Netbios` | **List** | List of NetBIOS names |
+| `ProviderAccountId` | **List** | ⚠️ MUST be a list, even for single values |
+| `ProviderAccountName` | **List** | List of account names |
+| `ResourceGroup` | **List** | List of resource groups |
+| `RepositoryName` | String or List | Can be either |
+
 #### String Fields
 ```yaml
 ComponentName: "my-component"
@@ -375,12 +402,13 @@ SearchName: "search-term"
 Cidr: "10.1.1.0/24"
 ```
 
-#### List Fields
+#### List Fields (Always Required as Lists)
 ```yaml
 TeamNames:
   - "Team1"
   - "Team2"
 
+# ⚠️ IMPORTANT: ProviderAccountId MUST always be a list
 ProviderAccountId:
   - "12345678-1234-1234-1234-123456789012"
   - "87654321-4321-4321-4321-210987654321"
@@ -468,7 +496,7 @@ DeploymentGroups:
     Domain: E-Commerce
     SubDomain: Online Store
     ReleaseDefinitions: []
-    Responsable: ecommerce-owner@company.com
+    Responsable: user@example.com
     Tier: 1
     Deployment_set: ecommerce
     
@@ -509,7 +537,7 @@ Environment Groups:
   - Name: Production-Environment
     Type: CLOUD
     Status: Production
-    Responsable: production-owner@company.com
+    Responsable: user@example.com
     Tier: 1
     TeamName: ProductionOps
     
@@ -603,9 +631,42 @@ python3 run.py --validate-only
 2. **Invalid field type**: Check data types (string vs list vs integer)
 3. **Invalid asset type**: Use only allowed asset type values (see AssetType table above)
 4. **Invalid email format**: Ensure responsible person emails are valid
-5. **Invalid ProviderAccountId format**: Must be a list, not a string
+5. **⚠️ Required list field as string**: Fields like `ProviderAccountId`, `Hostnames`, `Tags` MUST be lists
 6. **YAML parsing errors**: Check indentation and structure
 7. **Multi-condition rule errors**: Validate rule structure and field types
+
+### ⚠️ Required List Fields (Linter Error L001)
+
+The following fields **MUST always be YAML lists**, even when containing a single value:
+
+| Field | Validated In |
+|-------|-------------|
+| `ProviderAccountId` | Components, Services, Multi-Condition Rules |
+| `ProviderAccountName` | Components, Services, Multi-Condition Rules |
+| `ResourceGroup` | Components, Services, Multi-Condition Rules |
+| `AccountId` | Components, Services, Multi-Condition Rules |
+| `Hostnames` | Components, Services, Multi-Condition Rules |
+| `OsNames` | Components, Services, Multi-Condition Rules |
+| `Netbios` | Components, Services, Multi-Condition Rules |
+| `Fqdn` | Components, Services, Multi-Condition Rules |
+| `Tags` | Components, Services, Multi-Condition Rules |
+| `Tags_label` | Components, Services, Environments |
+| `Tags_rule` | Components, Services, Multi-Condition Rules |
+| `TeamNames` | Components, Applications |
+
+**Linter Error Example:**
+```
+❌ REQUIRED LIST FIELD ERRORS:
+   The following fields MUST be YAML lists (with - prefix), not strings:
+
+   • ProviderAccountId in service:
+     Error: 'ProviderAccountId' must be a list, not a string
+     Change from:
+         ProviderAccountId: "uuid-here"
+       To:
+         ProviderAccountId:
+           - "uuid-here"
+```
 
 ### Format Requirements
 - `ProviderAccountId`: Must be a list of strings

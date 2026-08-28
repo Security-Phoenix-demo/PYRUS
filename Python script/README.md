@@ -1,7 +1,7 @@
 ## Versioning
 
-V 4.6.2
-Date - 7 Agust 2025
+V 4.9.2
+Date - 22 January 2026
 
 # 🔧 Autoconfig – Developer-First CMDB-as-Code
 
@@ -64,7 +64,7 @@ Autoconfig brings configuration, ownership, and attribution into the developer w
 DeploymentGroups:
   - AppName: MyWebApp
     TeamNames: [WebTeam]
-    Responsable: lead@company.com
+    Responsable: user@example.com
     Tier: 2
     Components:
       - ComponentName: Backend
@@ -76,7 +76,7 @@ DeploymentGroups:
 Environment Groups:
   - Name: Production
     Type: CLOUD
-    Responsable: ops@company.com
+    Responsable: user@example.com
     Services:
       - Service: DBCluster
         Type: Infra
@@ -296,11 +296,59 @@ python run-phx.py <client_id> <client_secret> [options]
 | `--action_autocreate_teams_from_pteam` | Create teams from pteam tags | false | `--action_autocreate_teams_from_pteam=true` |
 | `--action_create_components_from_assets` | Create components from discovered assets | false | `--action_create_components_from_assets=true` |
 | `--verbose` | Enable verbose debug output | false | `--verbose` |
+| `--verbose-log` | Create detailed run-log.log with YAML context | false | `--verbose-log` |
 | `--clear-logs` | Clear all error logs and exit | false | `--clear-logs` |
 | `--debug-save-response` | Save API responses for debugging | false | `--debug-save-response` |
 | `--json-to-save` | Number of responses to save per operation type | 10 | `--json-to-save=3` |
 
 ### Debug and Troubleshooting Options
+
+#### Verbose Run Logging (--verbose-log)
+
+The `--verbose-log` flag creates a detailed `run-log.log` file that records every operation with YAML context. This is invaluable for troubleshooting failed deployments.
+
+**Usage:**
+```bash
+python3 run-phx.py <client_id> <client_secret> --verbose-log --action_cloud=true --action_code=true
+```
+
+**What's Logged:**
+- **Run Information**: Date/time, API domain, all parameters used
+- **Environments**: Success/failure status, services count
+  - If failed: The YAML config section with line numbers
+- **Services**: Success/failure/updated status, rules created/failed
+  - If failed: The service config section from YAML
+  - If rules fail: The specific rule section that failed
+- **Applications**: Success/failure status, components count
+  - If failed: The YAML config section up to Components
+- **Components**: Success/failure/updated status, rules created/failed
+  - If failed: The component config section from YAML
+  - If rules fail: The specific rule section that failed
+- **Summary**: Statistics for all entities processed
+
+**Log File Location:** `run-log.log` in the script directory
+
+**Example Log Entry for Failed Service:**
+```
+🔧 SERVICE: q2-mobile-core-prod
+   Status: ❌ FAILED
+   Rules Created: 0, Rules Failed: 1
+   Error: Service creation failed - 409 Conflict
+
+   📄 Config Section (lines 1069-1083):
+   ┌──────────────────────────────────────────────────────────
+   │   - Service: q2-mobile-core-prod
+   │     Deployment_set: mobile-prod
+   │     TeamNames:
+   │     - mobile-monks-prod
+   │     MULTI_MultiConditionRules:
+   │     - AssetType: CONTAINER
+   │       Tag_rule:
+   │       - '*mobile-core*'
+   └──────────────────────────────────────────────────────────
+```
+
+**Best Practice:** Use `--verbose-log` during initial deployments or when troubleshooting issues. The log file can be large for big configurations.
 
 #### Debug Response Saving
 
@@ -342,7 +390,7 @@ python3 run-phx.py client_id secret --debug-save-response --json-to-save=0 --act
 Debug responses are organized by run with the format:
 ```
 debug_responses/
-├── COMPANY2_2508270856/          # Domain: COMPANY2, Run ID: 2508270856 (25/08/27 08:56)
+├── COMPANY_2508270856/          # Domain: COMPANY, Run ID: 2508270856 (25/08/27 08:56)
 │   ├── team_creation_20250827_085601_001.json
 │   ├── team_fetch_20250827_085602_001.json
 │   ├── component_creation_20250827_085603_001.json
@@ -358,7 +406,7 @@ debug_responses/
 ```
 
 **Domain Extraction Examples:**
-- `https://api.COMPANY2.securityphoenix.cloud` → `COMPANY2`
+- `https://api.COMPANY.securityphoenix.cloud` → `COMPANY`
 - `api.demo.appsecphx.io` → `demo`
 - `localhost:8080` → `localhost`
 
@@ -372,7 +420,7 @@ Each saved file contains:
 
 ### Team Configuration and User Management
 
-The script now supports automatic user creation from team configuration files. Users can be created with specific roles based on their `EmployeeRole` in the team configuration.
+The script now supports automatic user creation from team configuration files. Users can be created with specific roles based on their `EmployeeRole` or `EmployeeType` in the team configuration. Additionally, `Tag_label` can be used to categorize team members into sub-groups.
 
 #### Team Member Configuration Format
 
@@ -381,21 +429,54 @@ Team configuration files should be placed in the `Resources/Teams` directory wit
 ```yaml
 TeamName: "Example Team"
 TeamMembers:
-  - Name: "John Smith"  # Required, must have first and last name
-    EmailAddress: "john.smith@company.com"  # Required
-    EmployeeRole: "Engineering User"  # Optional, maps to Phoenix roles
+  - Name: "John Smith"            # Required, must have first and last name
+    EmailAddress: "user@example.com"  # Required
+    EmployeeRole: "Engineering User"  # Optional, maps to Phoenix roles (preferred)
+    EmployeeType: "Employee"      # Optional, alternative to EmployeeRole
+    Tag_label: "Backend"          # Optional, team sub-group identifier
 ```
 
-#### Supported Employee Roles
+#### Supported Employee Roles and Types
 
-The following `EmployeeRole` values are mapped to Phoenix roles:
+The script supports **two fields** for role assignment (`EmployeeRole` takes precedence over `EmployeeType`):
 
-| Team Config Role | Phoenix Role |
-|-----------------|--------------|
-| Security Champion | SECURITY_CHAMPION |
-| Engineering User | ENGINEERING_USER |
-| Application Admin | APPLICATION_ADMIN |
-| *(any other value)* | ORG_USER |
+| EmployeeRole Value | EmployeeType Value | Phoenix Role |
+|-------------------|-------------------|--------------|
+| Security Champion | Manager | SECURITY_CHAMPION |
+| Engineering User | Employee | ENGINEERING_USER |
+| Application Admin | - | APPLICATION_ADMIN |
+| - | Contractor | ORG_USER |
+| *(any other value)* | *(any other value)* | ORG_USER |
+
+#### Tag_label Field
+
+The `Tag_label` field allows you to categorize team members into logical sub-groups within a team. This is useful for:
+- Organizing team members by function (e.g., "Backend", "Frontend", "DevOps")
+- Grouping by product area (e.g., "RIX", "RA", "Engine")
+- Any custom categorization scheme
+
+**Example with Tag_label:**
+```yaml
+TeamName: PrecisionLender
+TeamMembers:
+  - Name: John Doe
+    EmailAddress: user@example.com
+    EmployeeType: Manager
+    Tag_label: 'axx'
+  - Name: John Doe2
+    EmailAddress: user@example.com
+    EmployeeType: Employee
+    Tag_label: 'axx'
+  - Name: Johndoe3
+    EmailAddress: user@example.com
+    EmployeeType: Manager
+    Tag_label: 'RA'
+```
+
+In this example:
+- `EmployeeType: Manager` → User gets `SECURITY_CHAMPION` role
+- `EmployeeType: Employee` → User gets `ENGINEERING_USER` role
+- `Tag_label: 'axx'` → Identifies members as part of the RIX sub-group
 
 #### Example: Creating Users from Team Configuration
 
@@ -416,17 +497,19 @@ python run-phx.py your_client_id your_client_secret \
 When `--action_create_users_from_teams` is enabled:
 1. Validates team member data (name format, required fields)
 2. Checks for existing users to avoid duplicates
-3. Creates users with appropriate roles based on `EmployeeRole`
-4. Automatically adds users to their respective teams
-5. Logs all operations and any errors
+3. Creates users with appropriate roles based on `EmployeeRole` or `EmployeeType`
+4. Logs `Tag_label` information for each member (for sub-group tracking)
+5. Automatically adds users to their respective teams
+6. Logs all operations and any errors
 
 #### Requirements for User Creation
 
 1. Team member must have:
    - Full name (first and last name) in the `Name` field
    - Valid email address in the `EmailAddress` field
-2. Optional `EmployeeRole` field determines Phoenix role
-3. Team configuration must be in the correct YAML format
+2. Optional `EmployeeRole` or `EmployeeType` field determines Phoenix role
+3. Optional `Tag_label` field for team sub-group categorization
+4. Team configuration must be in the correct YAML format
 
 #### Error Handling
 
@@ -602,7 +685,7 @@ Environment Groups:
   - Name: Production
     Type: CLOUD
     Status: Production
-    Responsable: ops@company.com
+    Responsable: user@example.com
     Tier: 1
     TeamName: DevOps
 ```
@@ -613,7 +696,7 @@ Environment Groups:
   - Name: Production
     Type: CLOUD
     Status: Production
-    Responsable: ops@company.com
+    Responsable: user@example.com
     Tier: 1
     TeamName: DevOps
     Services:
@@ -631,7 +714,7 @@ Environment Groups:
   - Name: Production
     Type: CLOUD
     Status: Production
-    Responsable: ops@company.com
+    Responsable: user@example.com
     Services:
       - Service: DatabaseService
         Type: Cloud
@@ -660,7 +743,7 @@ DeploymentGroups:
   - AppName: MyWebApp
     TeamNames:
       - WebTeam
-    Responsable: lead@company.com
+    Responsable: user@example.com
     Tier: 2
 ```
 
@@ -671,7 +754,7 @@ DeploymentGroups:
     TeamNames:
       - WebTeam
       - APITeam
-    Responsable: lead@company.com
+    Responsable: user@example.com
     Tier: 2
     Components:
       - ComponentName: Frontend
@@ -692,7 +775,7 @@ DeploymentGroups:
   - AppName: EnterpriseApp
     TeamNames:
       - CoreTeam
-    Responsable: architect@company.com
+    Responsable: user@example.com
     Tier: 1
     Components:
       - ComponentName: APIGateway
@@ -719,7 +802,7 @@ TeamName: DevTeam
 AzureDevopsAreaPath: company\DevTeam
 TeamMembers:
   - Name: John Smith
-    EmailAddress: john.smith@company.com
+    EmailAddress: user@example.com
     EmployeeType: Employee
 ```
 
@@ -730,11 +813,11 @@ AzureDevopsAreaPath: company\SecurityTeam
 RecreateTeamAssociations: True
 TeamMembers:
   - Name: Alice Johnson
-    EmailAddress: alice.j@company.com
+    EmailAddress: user@example.com
     EmployeeType: Employee
     Level: Lead
   - Name: Bob Wilson
-    EmailAddress: bob.w@company.com
+    EmailAddress: user@example.com
     EmployeeType: Contractor
     Level: Senior
 ```
@@ -834,7 +917,7 @@ DeploymentGroups:
   - AppName: MyApp
     TeamNames:
       - DevTeam
-    Responsable: admin@company.com
+    Responsable: user@example.com
     Tier: 3
     Components:
       - ComponentName: Frontend
@@ -846,7 +929,7 @@ Environment Groups:
   - Name: Production
     Type: CLOUD
     Tier: 1
-    Responsable: ops@company.com
+    Responsable: user@example.com
     Services:
       - Service: WebService
         Type: Cloud
@@ -862,7 +945,7 @@ TeamName: DevTeam
 AzureDevopsAreaPath: company\DevTeam
 TeamMembers:
   - Name: John Doe
-    EmailAddress: john.doe@company.com
+    EmailAddress: user@example.com
     EmployeeType: Employee
 ```
 
@@ -1220,7 +1303,7 @@ TeamWikiLocation:
 RecreateTeamAssociations: False
 TeamMembers:
 - Name: james terry
-  EmailAddress: James.terry@company.com
+  EmailAddress: user@example.com
   EmployeeType: Employee
   Level: M6 
 ```
@@ -1280,10 +1363,10 @@ Environment Groups:
   - Name: TST_Production
     Type: CLOUD
     Status: Production
-    Responsable: ciso6.ttt@company.com
+    Responsable: user@example.com
 ```
 
-In the example above, user `ciso6.ttt@company.com` will be
+In the example above, user `user@example.com` will be
 created if not present in Phoenix. User first and last name are deduced from the first part of the email 
 
 (`ciso6.ttt`) -> first name = ciso6; last name = ttt
@@ -1309,7 +1392,7 @@ Environment Groups:
   - Name: TST_Production
     Type: CLOUD
     Status: Production
-    Responsable: frankadm@admin.com
+    Responsable: user@example.com
     Tier: 2 #importance from 1-10
     TeamName: SP_lima20 #name of the team as it appears in hives and teams 
     Status: Production
@@ -1347,7 +1430,7 @@ Environment Groups:
   - Name: TST_Production
     Type: CLOUD
     Status: Production
-    Responsable: frankadm@admin.com
+    Responsable: user@example.com
     Tier: 2 #importance from 1-10
     TeamName: SP_lima20 #name of the team as it appears in hives and teams 
     Status: Production
@@ -1428,7 +1511,7 @@ Environment Groups:
   - Name: TST_Production
     Type: CLOUD
     Status: Production
-    Responsable: frankadm@admin.com
+    Responsable: user@example.com
     Tier: 2 #importance from 1-10
     TeamName: SP_lima20 #name of the team as it appears in hives and teams 
     Status: Production
@@ -1498,10 +1581,10 @@ DeploymentGroups:
   - AppName: TST_TestApp10915 #name of the application
     Domain: Security
     SubDomain: Simplified Access Management
-    Responsable: ciso4.test@company.com
+    Responsable: user@example.com
 ```
 
-In the example above, user `ciso4.test@company.com` will be
+In the example above, user `user@example.com` will be
 created if not present in Phoenix. User first and last name are deduced from the first part of the email 
 
 (`ciso4.test`) -> first name = ciso4; last name = test
@@ -1537,7 +1620,7 @@ DeploymentGroups:
     Domain: Security  #domain = component or application can be used to group by bysiness unit
     SubDomain: Simplified Access Management  #sub-domain = component or application can be used to group by busienss unit
     ReleaseDefinitions: []
-    Responsable: frankadm@admin.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
+    Responsable: user@example.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
     Tier: 4 #importance from 1-10 higher -> more critical , 5 default = neutral
     Components:
       - ComponentName: product106-repo10 #name of the component 
@@ -1583,7 +1666,7 @@ DeploymentGroups:
     Domain: Security  #domain = component or application can be used to group by bysiness unit
     SubDomain: Simplified Access Management  #sub-domain = component or application can be used to group by busienss unit
     ReleaseDefinitions: []
-    Responsable: frankadm@admin.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
+    Responsable: user@example.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
     Tier: 4 #importance from 1-10 higher -> more critical , 5 default = neutral
     Components:
       - ComponentName: product106-repo10 #name of the component 
@@ -1673,7 +1756,7 @@ DeploymentGroups:
     Domain: Security  #domain = component or application can be used to group by bysiness unit
     SubDomain: Simplified Access Management  #sub-domain = component or application can be used to group by busienss unit
     ReleaseDefinitions: []
-    Responsable: frankadm@admin.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
+    Responsable: user@example.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
     Tier: 4 #importance from 1-10 higher -> more critical , 5 default = neutral
     Components:
       - ComponentName: product106-repo10 #name of the component 
@@ -1736,7 +1819,7 @@ The function for Component creation is [CreateRepositories](Phoenix.ps1).
 Any environment/application/service/component can have a Ticketing integration. Just add this configuration to the respected item that you want to integrate:
 ``
 Ticketing:
-  - TIntegrationName: IAS-Jira # optional
+  - TIntegrationName: COMPANY-Jira # optional
     Backlog: abinitio - mandatory
 ``
 
@@ -1747,11 +1830,11 @@ DeploymentGroups:
     Domain: Security  #domain = component or application can be used to group by bysiness unit
     SubDomain: Simplified Access Management  #sub-domain = component or application can be used to group by busienss unit
     ReleaseDefinitions: []
-    Responsable: ciso4.test@company.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
+    Responsable: user@example.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
     Tier: 4 #importance from 1-10 higher -> more critical , 5 default = neutral
     Deployment_set: Service1
     Ticketing:
-      - TIntegrationName: IAS-Jira
+      - TIntegrationName: COMPANY-Jira
         Backlog: abinitio
 ``
 
@@ -1760,7 +1843,7 @@ DeploymentGroups:
 Any environment/application/service/component can have a Messaging integration. Just add this configuration to the respected item that you want to integrate:
 ``
 Messaging:
-  - MIntegrationName: IAS-Slack # optional
+  - MIntegrationName: COMPANY-Slack # optional
     Channel: abinitio # mandatory
 ``
 
@@ -1771,11 +1854,11 @@ DeploymentGroups:
     Domain: Security  #domain = component or application can be used to group by bysiness unit
     SubDomain: Simplified Access Management  #sub-domain = component or application can be used to group by busienss unit
     ReleaseDefinitions: []
-    Responsable: ciso4.test@company.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
+    Responsable: user@example.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
     Tier: 4 #importance from 1-10 higher -> more critical , 5 default = neutral
     Deployment_set: Service1
     Messaging:
-      - MIntegrationName: IAS-Slack
+      - MIntegrationName: COMPANY-Slack
         Channel: abinitio
 ``
 
@@ -1802,7 +1885,7 @@ DeploymentGroups:
     Domain: Security  #domain = component or application can be used to group by bysiness unit
     SubDomain: Simplified Access Management  #sub-domain = component or application can be used to group by busienss unit
     ReleaseDefinitions: []
-    Responsable: frankadm@admin.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
+    Responsable: user@example.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
     Tier: 4 #importance from 1-10 higher -> more critical , 5 default = neutral
     Deployment_set: Service1
 
@@ -1811,7 +1894,7 @@ Environment Groups:
   - Name: TST_Production
     Type: CLOUD
     Status: Production
-    Responsable: frankadm@admin.com
+    Responsable: user@example.com
     Tier: 2 #importance from 1-10
     TeamName: SP_lima20 #name of the team as it appears in hives and teams 
     Status: Production
@@ -1845,7 +1928,7 @@ DeploymentGroups:
     Domain: Security  #domain = component or application can be used to group by bysiness unit
     SubDomain: Simplified Access Management  #sub-domain = component or application can be used to group by busienss unit
     ReleaseDefinitions: []
-    Responsable: frankadm@admin.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
+    Responsable: user@example.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
     Tier: 4 #importance from 1-10 higher -> more critical , 5 default = neutral
     Deployment_set: Service1
 
@@ -1853,7 +1936,7 @@ Environment Groups:
   - Name: TST_Infra
     Type: INFRA
     Tier: 2 #importance from 1-10
-    Responsable: admin@admin.com
+    Responsable: user@example.com
     TeamName: SP_axelot20 #name of the team as it appears in hives and teams 
     Status: Production
     Tag: infra
@@ -1977,6 +2060,108 @@ If you want to override the API domain from Phoenix.py file, use this option:
 ```
 --api_domain=https://newapi.appsecphx.io (or whatever is the domain)
 ```
+
+## Enhanced Execution Report (v4.9.2)
+
+The script provides a comprehensive execution report showing exactly what happened during processing. Each entity type (Environments, Applications, Services, Components, Deployments) is tracked with 5 distinct operation states:
+
+### Operation States
+
+| State | Description | Example |
+|-------|-------------|---------|
+| 📊 **Processed** | Total items attempted | 25 environments processed |
+| 🆕 **Created** | Newly created items | 20 new services created |
+| 🔄 **Updated** | Existing items modified | 3 applications updated |
+| ⏭️ **Already Existing** | Items skipped (no changes) | 2 components already exist |
+| ❌ **Errored** | Items that failed | 1 deployment failed |
+
+### Sample Report Output
+
+```
+================================================================================
+🎯 KEY METRICS - DETAILED BREAKDOWN
+================================================================================
+
+🌍 ENVIRONMENTS
+   ✅ Processed:            5
+   🆕 Created:              3
+   🔄 Updated:              1
+   ⏭️  Already Existing:     1
+   ❌ Errored:              0
+   📊 Success Rate:     100.0%
+
+📱 APPLICATIONS
+   ✅ Processed:           10
+   🆕 Created:              8
+   🔄 Updated:              1
+   ⏭️  Already Existing:     1
+   ❌ Errored:              0
+   📊 Success Rate:     100.0%
+
+🔧 SERVICES
+   ✅ Processed:           25
+   🆕 Created:             20
+   🔄 Updated:              3
+   ⏭️  Already Existing:     2
+   ❌ Errored:              0
+   📊 Success Rate:     100.0%
+
+📦 COMPONENTS
+   ✅ Processed:           15
+   🆕 Created:             12
+   🔄 Updated:              2
+   ⏭️  Already Existing:     1
+   ❌ Errored:              0
+   📊 Success Rate:     100.0%
+
+🚀 DEPLOYMENTS
+   ✅ Processed:            8
+   🆕 Created:              6
+   🔄 Updated:              1
+   ⏭️  Already Existing:     0
+   ❌ Errored:              1
+   📊 Success Rate:      87.5%
+
+================================================================================
+FINAL SUMMARY
+================================================================================
+
+🚀 DEPLOYMENT SUMMARY:
+   ✅ Deployments Processed Correctly: 7
+   ❌ Deployments Processed Incorrectly: 1
+   📋 Deployment errors logged to: deployment_errors.log
+
+--------------------------------------------------
+📈 GRAND TOTALS:
+   🆕 Total Created:           49
+   🔄 Total Updated:            8
+   ⏭️  Total Already Existing:  5
+   ❌ Total Errored:            1
+   📊 Grand Total Processed:   63
+   🎯 Overall Success Rate:   98.4%
+
+⏱️  Total Duration: 0:05:32
+================================================================================
+END OF REPORT
+================================================================================
+```
+
+### Deployment Error Log
+
+Deployment-specific errors are logged to a separate `deployment_errors.log` file for focused troubleshooting:
+
+```
+--------------------------------------------------------------------------------
+TIME: 2026-01-22 14:30:45
+OPERATION: create_deployment
+DEPLOYMENT PAIR: MyApp -> MyService
+APPLICATION: MyApp
+ENVIRONMENT: Production
+ERROR: Service not found in environment
+--------------------------------------------------------------------------------
+```
+
+---
 
 ## Error Handling and Logging
 

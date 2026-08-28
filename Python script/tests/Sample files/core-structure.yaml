@@ -1,12 +1,12 @@
 # yaml-language-server: $schema=BankingCore.schema.json
 AllAccessAccounts: # Not mandatory list of all access account emails
-  - ciso@company.com
+  - user@example.com
 DeploymentGroups:
   - AppName: FR_TestApp1
     Status: NotStarted
     TeamName: FC_lima
     ReleaseDefinitions: []
-    Responsable: frankadm@admin.com
+    Responsable: user@example.com
     Tier: 2 #importance from 1-10
     Components:
       - ComponentName: product1-repo1
@@ -27,7 +27,7 @@ DeploymentGroups:
     Status: NotStarted
     TeamName: FC_lima
     ReleaseDefinitions: []
-    Responsable: frankadm@admin.com
+    Responsable: user@example.com
     Tier: 7 #importance from 1-10
     Components:
       - ComponentName: coreapp2_rule1-repo
@@ -53,7 +53,7 @@ DeploymentGroups:
     Status: NotStarted
     TeamName: FC_lima
     ReleaseDefinitions: []
-    Responsable: frankadm@admin.com
+    Responsable: user@example.com
     Tier: 2 #importance from 1-10
     Components:
       - ComponentName: product3-prod
@@ -85,7 +85,7 @@ Environment Groups:
   - Name: FR_Production
     Type: CLOUD
     Status: Production
-    Responsable: frankadm@admin.com
+    Responsable: user@example.com
     Tier: 2 #importance from 1-10
     TeamName: FC_lima #name of the team as it appears in hives and teams 
     Status: Production
@@ -107,7 +107,7 @@ Environment Groups:
   - Name: FR_Dev
     Type: CLOUD
     Status: Production
-    Responsable: frankadm@admin.com
+    Responsable: user@example.com
     Tier: 5
     Tag: dev
     Services:
@@ -124,7 +124,7 @@ Environment Groups:
   - Name: FR_Infra
     Type: INFRA
     Tier: 2 #importance from 1-10
-    Responsable: frankadm@admin.com
+    Responsable: user@example.com
     TeamName: FC_axelot #name of the team as it appears in hives and teams 
     Status: Production
     Tag: infra

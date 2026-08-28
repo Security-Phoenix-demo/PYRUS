@@ -3,30 +3,30 @@ AzureDevopsAreaPath: company\FC_axelot
 TeamWikiLocation: 
 TeamMembers:
 - Name: james terry
-  EmailAddress: james.terry@company.com
+  EmailAddress: user@example.com
   EmployeeType: Employee
   Level: M6 
 - Name: james blake
-  EmailAddress: dave.blake@company.com
+  EmailAddress: user@example.com
   EmployeeType: Employee
   Level: L4 
 - Name: rich terry
-  EmailAddress: rich.terry@company.com
+  EmailAddress: user@example.com
   EmployeeType: UK Contractor
   Level: L5 
 - Name: joe doe
-  EmailAddress: joe.doe@company.com
+  EmailAddress: user@example.com
   EmployeeType: Employee
   Level: L2 
 - Name: darren mcperson
-  EmailAddress: darren.mcperson@company.com
+  EmailAddress: user@example.com
   EmployeeType: UK Contractor
   Level: L4 Senior
 - Name: person mcpersonface
-  EmailAddress: person.mcpersonface@company.com
+  EmailAddress: user@example.com
   EmployeeType: Employee
   Level: L1 
 - Name: lady mcladyface
-  EmailAddress: lady.mcladyface@company.com
+  EmailAddress: user@example.com
   EmployeeType: Contractor
   Level: L3 

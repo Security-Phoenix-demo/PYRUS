@@ -1,7 +1,7 @@
 ## Versioning
 
-V 4.8.9
-Date - November 4, 2025
+V 4.9.0
+Date - November 30, 2025
 
 # 🔥 Phoenix PYRUS (Phoenix YAML Resource Unified Sync)
 
@@ -88,7 +88,7 @@ Just continuous, YAML-driven synchronization that keeps security aligned with en
 
 ## 🏗️ Architecture Overview (Mermaid Diagram)
 
-```mermaid
+
 flowchart TD
     A[CI/CD Pipelines] --> B[PYRUS Metadata Engine]
     B --> C[YAML Ownership Definitions]
@@ -102,10 +102,21 @@ flowchart TD
 
 ## 🎉 Recent Updates & Improvements
 
+### **🆕 Version 4.9.0 Features** ⚡ **ENHANCED AUTOMATIC ASSET GROUPING & COMPONENT CREATION**
+- ✅ **Intelligent Tag-Based Grouping**: Automatically groups 250K+ assets by Application, Team, or custom tags with frequency analysis
+- ✅ **Smart Fallback Strategies**: Asset-type specific handling for untagged assets (CIDR, hostname, repository, container name)
+- ✅ **Checkpoint & Resume System**: Interruption-safe execution with 3-level checkpointing (Ctrl+C safe, zero work lost)
+- ✅ **Interactive & Batch Modes**: Guided interactive setup or fully automated batch mode for CI/CD
+- ✅ **Smart Routing**: Context-aware Component vs Service decisions (95%+ accuracy)
+- ✅ **Automatic Rule Creation**: Separate rules per tag (2+ per component) for easier troubleshooting
+- ✅ **350+ Configuration Options**: Comprehensive YAML-based configuration with sensible defaults
+- ✅ **Full Export & Reporting**: Phoenix-compatible YAML, JSON reports, detailed logs, and audit trail
+- ✅ **Enterprise Scale**: Handles 250K+ assets in 4-5 hours with production validation
+
 ### **🆕 Version 4.8.9 Features** ⚡ **RULE PAYLOAD DEBUG SAVE ENHANCEMENT**
-- ✅ **Automatic Payload Capture**: All rule creation payloads saved to JSON files in debug folder
+- ✅ **Automatic Payload Capture**: All rule creation payloads saved to JSON files in the debug folder
 - ✅ **Multi-Status Tracking**: Captures request, success, 409 conflicts, 400 errors, HTTP errors, and network errors
-- ✅ **Comprehensive Integration**: 19 integration points across component, service, and multi-condition rules
+- ✅ **Comprehensive Integration**: 19 integration points across components, services, and multi-condition rules
 - ✅ **Persistent Storage**: Structured JSON format with timestamps, counters, and metadata
 - ✅ **Offline Analysis**: Review payloads without re-running scripts for troubleshooting
 - ✅ **Quality Assurance**: Verify AccountId arrays and Tag_rule filters in actual payloads
@@ -181,13 +192,24 @@ flowchart TD
 - ✅ **Backward Compatibility**: All existing configurations continue to work without changes
 
 ### **📋 Documentation**
+
+#### **Core Documentation**
+- **[Architecture Overview](ARCHITECTURE.md)** - System architecture, component flow, and key files reference
+- **[Developer Quick Start](DEVELOPER_QUICK_START.md)** - Setup, common tasks, and onboarding guide
 - **[YAML Configuration Guide](YAML_CONFIGURATION_GUIDE.md)** - Comprehensive 500+ line guide with examples, validation, and troubleshooting
 - **[YAML Quick Reference](YAML_QUICK_REFERENCE.md)** - Concise reference card for quick lookups during configuration
+- **[Utilities Catalog](UTILITIES_CATALOG.md)** - Complete catalog of 25+ utility scripts with usage examples
+- **[Version History](VERSION_HISTORY.md)** - Consolidated release notes and feature timeline
+
+#### **Feature Documentation**
 - **[Services & Components Tracking](SERVICES_COMPONENTS_TRACKING_README.md)** - Complete guide for enhanced tracking and reporting features
 - **[Release V4.8.8](RELEASE_V4.8.8.md)** - Multi-YAML configuration tracking with per-file breakdowns and enhanced error logging
 - **[Release V4.8.7](RELEASE_V4.8.7.md)** - Enhanced services and components tracking with key metrics dashboard and priority reporting
 - **[Release V4.8.6](RELEASE_V4.8.6.md)** - Detailed information about multi-deployment strategy system and component-level deployment control
 - **[Release V4.8.5](RELEASE_V4.8.5.md)** - Enhanced validation system with optional deferred verification features
+
+#### **AI Assistant Rules**
+- **[.cursor/rules/phoenix-project-master.mdc](.cursor/rules/phoenix-project-master.mdc)** - Consolidated Cursor rules for YAML schema, Python code style, and project structure
 
 ### **🔧 Recent Critical Fixes**
 - ✅ **Application Tag Processing**: Fixed missing Tag_label support in application creation API calls
@@ -337,10 +359,11 @@ The following AssetType values are supported and validated by the Phoenix Securi
 
 ## Versioning
 
-V 4.8.9
-Date - November 4, 2025
+V 4.9.0
+Date - November 30, 2025
 
 ### Recent Versions
+- **V 4.9.0** (November 30, 2025): Enhanced automatic asset grouping & component creation with intelligent tag-based grouping, smart fallback strategies, checkpoint/resume, and 350+ configuration options
 - **V 4.8.9** (November 4, 2025): Rule payload debug save enhancement with automatic payload capture to JSON files, multi-status tracking, and comprehensive debugging
 - **V 4.8.8** (October 31, 2025): Multi-YAML configuration tracking with per-file breakdowns, comprehensive configuration previews, and enhanced error logging
 - **V 4.8.7** (October 30, 2025): Enhanced services and components tracking with key metrics dashboard, priority reporting, and final summary section
@@ -487,7 +510,12 @@ python run-phx.py <client_id> <client_secret> [options]
 | `--action_deployment` | Create deployments | false | `--action_deployment=true` |
 | `--action_autolink_deploymentset` | Auto-create deployments based on name similarity | false | `--action_autolink_deploymentset=true` |
 | `--action_autocreate_teams_from_pteam` | Create teams from pteam tags | false | `--action_autocreate_teams_from_pteam=true` |
-| `--action_create_components_from_assets` | Create components from discovered assets | false | `--action_create_components_from_assets=true` |
+| `--action_create_components_from_assets` | **LEGACY**: Create components from discovered assets (name-based) | false | `--action_create_components_from_assets=true` |
+| `--action_autogroup` | **NEW**: Intelligent tag-based asset grouping and component creation | false | `--action_autogroup=true` |
+| `--autogroup_config` | Path to autogroup configuration file (relative to Resources/) | CLI/tag-automation/autogroup-config.yaml | `--autogroup_config=custom-config.yaml` |
+| `--autogroup_mode` | Autogroup execution mode (interactive or batch) | batch | `--autogroup_mode=interactive` |
+| `--autogroup_asset_source` | Override asset source (api or file) | None | `--autogroup_asset_source=file` |
+| `--autogroup_asset_file` | Path to asset JSON file (when using file source) | None | `--autogroup_asset_file=example-data/assets.json` |
 | `--quick-check` | **NEW**: Configurable service validation interval for faster processing | 10 | `--quick-check 20` |
 | `--silent` | **NEW**: Enable silent mode for CI/CD pipelines (validate only at end) | false | `--silent` |
 | `--verbose` | Enable detailed debug output for troubleshooting | false | `--verbose` |
@@ -742,7 +770,7 @@ Team configuration files should be placed in the `Resources/Teams` directory wit
 TeamName: "Example Team"
 TeamMembers:
   - Name: "John Smith"  # Required, must have first and last name
-    EmailAddress: "john.smith@company.com"  # Required
+    EmailAddress: "user@example.com"  # Required
     EmployeeRole: "Engineering User"  # Optional, maps to Phoenix roles
 ```
 
@@ -905,6 +933,41 @@ This command clears all error logs (errors.log and other *.log files) and exits 
 - Starting with clean logs for debugging
 - Maintenance operations
 - Automated script cleanup
+
+### Enhanced Automatic Asset Grouping ⚡ **NEW IN v4.9.0**
+
+The new automatic asset grouping feature intelligently organizes assets and creates components based on tags, with smart fallback strategies for untagged assets.
+
+#### **Quick Start**
+```bash
+# Basic usage (batch mode, non-interactive)
+python run-phx.py your_client_id your_client_secret --action_autogroup=true
+
+# Interactive mode (guided setup)
+python run-phx.py your_client_id your_client_secret \
+  --action_autogroup=true \
+  --autogroup_mode=interactive
+
+# Test with local file (faster)
+python run-phx.py your_client_id your_client_secret \
+  --action_autogroup=true \
+  --autogroup_asset_source=file \
+  --autogroup_asset_file=example-data/assets.json
+```
+
+#### **Key Features**
+- 🎯 **Tag-Based Grouping**: Groups assets by Application, Team, or custom tags (analyzes 250K+ assets)
+- 🔄 **Smart Fallbacks**: INFRA (CIDR/hostname), SOFTWARE (repo), CONTAINER (name), CLOUD (provider/account)
+- 💾 **Checkpoint/Resume**: Ctrl+C safe, automatically resumes from last checkpoint
+- 🎮 **Dual Modes**: Interactive (guided) or Batch (fully automated for CI/CD)
+- 🧭 **Smart Routing**: Auto-decides Component vs Service based on context (95%+ accuracy)
+- 📋 **Auto Rules**: Creates 2+ rules per component for automatic asset assignment
+
+#### **Documentation**
+- **Quick Start:** `Python script/Resources/tv/tag-automation/AUTOGROUP_QUICK_START.md`
+- **Complete Guide:** `Python script/Resources/tv/tag-automation/AUTOGROUP_README.md`
+- **Configuration:** `Python script/Resources/tv/tag-automation/autogroup-config.yaml` (350+ options)
+- **Release Notes:** `RELEASE_V4.9.0.md`
 
 ### Common Usage Patterns
 
@@ -1153,7 +1216,7 @@ Environment Groups:
   - Name: Production
     Type: CLOUD
     Status: Production
-    Responsable: ops@company.com
+    Responsable: user@example.com
     Tier: 1
     TeamName: DevOps
 ```
@@ -1164,7 +1227,7 @@ Environment Groups:
   - Name: Production
     Type: CLOUD
     Status: Production
-    Responsable: ops@company.com
+    Responsable: user@example.com
     Tier: 1
     TeamName: DevOps
     Services:
@@ -1182,7 +1245,7 @@ Environment Groups:
   - Name: Production
     Type: CLOUD
     Status: Production
-    Responsable: ops@company.com
+    Responsable: user@example.com
     Services:
       - Service: DatabaseService
         Type: Cloud
@@ -1211,7 +1274,7 @@ DeploymentGroups:
   - AppName: MyWebApp
     TeamNames:
       - WebTeam
-    Responsable: lead@company.com
+    Responsable: user@example.com
     Tier: 2
 ```
 
@@ -1222,7 +1285,7 @@ DeploymentGroups:
     TeamNames:
       - WebTeam
       - APITeam
-    Responsable: lead@company.com
+    Responsable: user@example.com
     Tier: 2
     Components:
       - ComponentName: Frontend
@@ -1243,7 +1306,7 @@ DeploymentGroups:
   - AppName: EnterpriseApp
     TeamNames:
       - CoreTeam
-    Responsable: architect@company.com
+    Responsable: user@example.com
     Tier: 1
     Components:
       - ComponentName: APIGateway
@@ -1270,7 +1333,7 @@ TeamName: DevTeam
 AzureDevopsAreaPath: company\DevTeam
 TeamMembers:
   - Name: John Smith
-    EmailAddress: john.smith@company.com
+    EmailAddress: user@example.com
     EmployeeType: Employee
 ```
 
@@ -1281,11 +1344,11 @@ AzureDevopsAreaPath: company\SecurityTeam
 RecreateTeamAssociations: True
 TeamMembers:
   - Name: Alice Johnson
-    EmailAddress: alice.j@company.com
+    EmailAddress: user@example.com
     EmployeeType: Employee
     Level: Lead
   - Name: Bob Wilson
-    EmailAddress: bob.w@company.com
+    EmailAddress: user@example.com
     EmployeeType: Contractor
     Level: Senior
 ```
@@ -1386,7 +1449,7 @@ DeploymentGroups:
   - AppName: MyApp
     TeamNames:
       - DevTeam
-    Responsable: admin@company.com
+    Responsable: user@example.com
     Tier: 3
     Components:
       - ComponentName: Frontend
@@ -1398,7 +1461,7 @@ Environment Groups:
   - Name: Production
     Type: CLOUD
     Tier: 1
-    Responsable: ops@company.com
+    Responsable: user@example.com
     Services:
       - Service: WebService
         Type: Cloud
@@ -1414,7 +1477,7 @@ TeamName: DevTeam
 AzureDevopsAreaPath: company\DevTeam
 TeamMembers:
   - Name: John Doe
-    EmailAddress: john.doe@company.com
+    EmailAddress: user@example.com
     EmployeeType: Employee
 ```
 
@@ -1775,7 +1838,7 @@ TeamWikiLocation:
 RecreateTeamAssociations: False
 TeamMembers:
 - Name: james terry
-  EmailAddress: James.terry@company.com
+  EmailAddress: user@example.com
   EmployeeType: Employee
   Level: M6 
 ```
@@ -1835,10 +1898,10 @@ Environment Groups:
   - Name: TST_Production
     Type: CLOUD
     Status: Production
-    Responsable: ciso6.ttt@company.com
+    Responsable: user@example.com
 ```
 
-In the example above, user `ciso6.ttt@company.com` will be
+In the example above, user `user@example.com` will be
 created if not present in Phoenix. User first and last name are deduced from the first part of the email 
 
 (`ciso6.ttt`) -> first name = ciso6; last name = ttt
@@ -1864,7 +1927,7 @@ Environment Groups:
   - Name: TST_Production
     Type: CLOUD
     Status: Production
-    Responsable: frankadm@admin.com
+    Responsable: user@example.com
     Tier: 2 #importance from 1-10
     TeamName: SP_lima20 #name of the team as it appears in hives and teams 
     Status: Production
@@ -1902,7 +1965,7 @@ Environment Groups:
   - Name: TST_Production
     Type: CLOUD
     Status: Production
-    Responsable: frankadm@admin.com
+    Responsable: user@example.com
     Tier: 2 #importance from 1-10
     TeamName: SP_lima20 #name of the team as it appears in hives and teams 
     Status: Production
@@ -1983,7 +2046,7 @@ Environment Groups:
   - Name: TST_Production
     Type: CLOUD
     Status: Production
-    Responsable: frankadm@admin.com
+    Responsable: user@example.com
     Tier: 2 #importance from 1-10
     TeamName: SP_lima20 #name of the team as it appears in hives and teams 
     Status: Production
@@ -2053,10 +2116,10 @@ DeploymentGroups:
   - AppName: TST_TestApp10915 #name of the application
     Domain: Security
     SubDomain: Simplified Access Management
-    Responsable: ciso4.test@company.com
+    Responsable: user@example.com
 ```
 
-In the example above, user `ciso4.test@company.com` will be
+In the example above, user `user@example.com` will be
 created if not present in Phoenix. User first and last name are deduced from the first part of the email 
 
 (`ciso4.test`) -> first name = ciso4; last name = test
@@ -2092,7 +2155,7 @@ DeploymentGroups:
     Domain: Security  #domain = component or application can be used to group by bysiness unit
     SubDomain: Simplified Access Management  #sub-domain = component or application can be used to group by busienss unit
     ReleaseDefinitions: []
-    Responsable: frankadm@admin.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
+    Responsable: user@example.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
     Tier: 4 #importance from 1-10 higher -> more critical , 5 default = neutral
     Components:
       - ComponentName: product106-repo10 #name of the component 
@@ -2138,7 +2201,7 @@ DeploymentGroups:
     Domain: Security  #domain = component or application can be used to group by bysiness unit
     SubDomain: Simplified Access Management  #sub-domain = component or application can be used to group by busienss unit
     ReleaseDefinitions: []
-    Responsable: frankadm@admin.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
+    Responsable: user@example.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
     Tier: 4 #importance from 1-10 higher -> more critical , 5 default = neutral
     Components:
       - ComponentName: product106-repo10 #name of the component 
@@ -2228,7 +2291,7 @@ DeploymentGroups:
     Domain: Security  #domain = component or application can be used to group by bysiness unit
     SubDomain: Simplified Access Management  #sub-domain = component or application can be used to group by busienss unit
     ReleaseDefinitions: []
-    Responsable: frankadm@admin.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
+    Responsable: user@example.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
     Tier: 4 #importance from 1-10 higher -> more critical , 5 default = neutral
     Components:
       - ComponentName: product106-repo10 #name of the component 
@@ -2291,7 +2354,7 @@ The function for Component creation is [CreateRepositories](Phoenix.ps1).
 Any environment/application/service/component can have a Ticketing integration. Just add this configuration to the respected item that you want to integrate:
 ``
 Ticketing:
-  - TIntegrationName: IAS-Jira # optional
+  - TIntegrationName: CLI-Jira # optional
     Backlog: abinitio - mandatory
 ``
 
@@ -2302,11 +2365,11 @@ DeploymentGroups:
     Domain: Security  #domain = component or application can be used to group by bysiness unit
     SubDomain: Simplified Access Management  #sub-domain = component or application can be used to group by busienss unit
     ReleaseDefinitions: []
-    Responsable: ciso4.test@company.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
+    Responsable: user@example.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
     Tier: 4 #importance from 1-10 higher -> more critical , 5 default = neutral
     Deployment_set: Service1
     Ticketing:
-      - TIntegrationName: IAS-Jira
+      - TIntegrationName: CLI-Jira
         Backlog: abinitio
 ``
 
@@ -2315,7 +2378,7 @@ DeploymentGroups:
 Any environment/application/service/component can have a Messaging integration. Just add this configuration to the respected item that you want to integrate:
 ``
 Messaging:
-  - MIntegrationName: IAS-Slack # optional
+  - MIntegrationName: CLI-Slack # optional
     Channel: abinitio # mandatory
 ``
 
@@ -2326,11 +2389,11 @@ DeploymentGroups:
     Domain: Security  #domain = component or application can be used to group by bysiness unit
     SubDomain: Simplified Access Management  #sub-domain = component or application can be used to group by busienss unit
     ReleaseDefinitions: []
-    Responsable: ciso4.test@company.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
+    Responsable: user@example.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
     Tier: 4 #importance from 1-10 higher -> more critical , 5 default = neutral
     Deployment_set: Service1
     Messaging:
-      - MIntegrationName: IAS-Slack
+      - MIntegrationName: CLI-Slack
         Channel: abinitio
 ``
 
@@ -2357,7 +2420,7 @@ DeploymentGroups:
     Domain: Security  #domain = component or application can be used to group by bysiness unit
     SubDomain: Simplified Access Management  #sub-domain = component or application can be used to group by busienss unit
     ReleaseDefinitions: []
-    Responsable: frankadm@admin.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
+    Responsable: user@example.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
     Tier: 4 #importance from 1-10 higher -> more critical , 5 default = neutral
     Deployment_set: Service1
 
@@ -2366,7 +2429,7 @@ Environment Groups:
   - Name: TST_Production
     Type: CLOUD
     Status: Production
-    Responsable: frankadm@admin.com
+    Responsable: user@example.com
     Tier: 2 #importance from 1-10
     TeamName: SP_lima20 #name of the team as it appears in hives and teams 
     Status: Production
@@ -2400,7 +2463,7 @@ DeploymentGroups:
     Domain: Security  #domain = component or application can be used to group by bysiness unit
     SubDomain: Simplified Access Management  #sub-domain = component or application can be used to group by busienss unit
     ReleaseDefinitions: []
-    Responsable: frankadm@admin.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
+    Responsable: user@example.com #owner of the application mandatory, needs to be one of the user already created in the phoenix security
     Tier: 4 #importance from 1-10 higher -> more critical , 5 default = neutral
     Deployment_set: Service1
 
@@ -2408,7 +2471,7 @@ Environment Groups:
   - Name: TST_Infra
     Type: INFRA
     Tier: 2 #importance from 1-10
-    Responsable: admin@admin.com
+    Responsable: user@example.com
     TeamName: SP_axelot20 #name of the team as it appears in hives and teams 
     Status: Production
     Tag: infra
@@ -2715,11 +2778,361 @@ With the new reporting feature in v4.5.2, troubleshooting is significantly easie
 
 ### Asset Grouping and Component Creation
 
-For automated component creation from assets:
+#### **🆕 Enhanced Autogroup (v4.9.0)** - RECOMMENDED ✅
+The new intelligent tag-based asset grouping system with checkpoint/resume support:
+```bash
+python run-phx.py CLIENT_ID CLIENT_SECRET --action_autogroup=true
+```
+
+**Features:**
+- ✅ Tag-based grouping (Application, Team, custom tags)
+- ✅ Smart fallback strategies for untagged assets
+- ✅ Checkpoint/resume (interruption-safe)
+- ✅ Non-interactive batch mode + interactive mode
+- ✅ Automatic rule creation
+- ✅ 350+ configuration options
+- ✅ See `Python script/Resources/tv/tag-automation/AUTOGROUP_README.md` for complete guide
+
+#### **Legacy Name-Based Grouping** - DEPRECATED ⚠️
+For legacy automated component creation from assets (name-based only):
 - Group assets per name similarity (configurable through `ASSET_NAME_SIMILARITY_THRESHOLD` variable in Phoenix.py)
 - For each asset group containing more than 5 assets, suggest creating a component (component name can be overridden in console)
 - Number of assets in group is configurable through `ASSET_GROUP_MIN_SIZE_FOR_COMPONENT_CREATION` variable in Phoenix.py
 - If user confirms the component creation, component is created in that environment
+
+**Note:** This legacy method is deprecated. Use `--action_autogroup=true` instead for tag-based grouping with better features.
+
+### Autodetection of config files in GitHub repositories
+
+For automatic detection of config files in GitHub repositories, provide `github_pat` cmd line argument. 
+Then, in `run-config.yaml` set `EnableGitHubAutoDetectConfig` to `True` to enable this feature.
+Also, in `run-config.yaml` set `ConfigFileName` to the name of the config file to detect in GitHub repository (e.g. `assetconfig.phoenix`).
+Also, in `run-config.yaml` set `GitHubRepoFolder` to a local folder path, where the config files will be checked out.
+This feature now checks out only the detected config file, and nothing else.
+
+---
+
+## 🔄 Maintaining Phoenix Scanner Components
+
+### When to Update Scanner Client & Service
+
+The **Phoenix Scanner Client** and **Phoenix Scanner Service** need to be updated whenever new scanner types are added to the core `phoenix_multi_scanner_enhanced.py` script.
+
+### 📍 Files That Need Updates
+
+When adding new scanner translators (like `phoenix_csv`, `rapid7_csv`, etc.), update these files:
+
+#### 1. **Phoenix Scanner Client** (`Utils/Loading_Script_V5/phoenix-scanner-client/`)
+
+**File**: `scanner_list_actual.txt`
+- **Purpose**: List of all supported scanner types for client validation and documentation
+- **Update When**: New scanner translator is added
+- **Example**:
+```text
+phoenix_csv
+phoenix_csv_cloud
+phoenix_csv_infra
+phoenix_csv_software
+phoenix_csv_web
+rapid7_csv
+```
+
+#### 2. **Phoenix Scanner Service** (`Utils/Loading_Script_V5/phoenix-scanner-service/`)
+
+**File**: `app/models/schemas.py` (ScannerType enum)
+- **Purpose**: Reference list for API documentation (service accepts any scanner type)
+- **Update When**: New scanner translator is added (optional but recommended for API docs)
+- **Note**: Service accepts any `scanner_type` string, so this is mainly for OpenAPI documentation
+- **Example**:
+```python
+class ScannerType(str, Enum):
+    """Supported scanner types (extensible)"""
+    AUTO = "auto"
+    # Phoenix Native CSV
+    PHOENIX_CSV = "phoenix_csv"
+    PHOENIX_CSV_INFRA = "phoenix_csv_infra"
+    # ... etc
+```
+
+### 🚨 Update Checklist
+
+When adding a new scanner translator to `phoenix_multi_scanner_enhanced.py`:
+
+- [ ] ✅ Create translator in `scanner_translators/` directory
+- [ ] ✅ Add translator to `scanner_translators/__init__.py`
+- [ ] ✅ Register scanner config in `phoenix_multi_scanner_enhanced.py`
+- [ ] ✅ Add scanner name(s) to `phoenix-scanner-client/scanner_list_actual.txt`
+- [ ] ✅ Update `phoenix-scanner-service/app/models/schemas.py` (optional)
+- [ ] ✅ Update documentation (README, usage guides)
+- [ ] ✅ Test via client and service APIs
+
+### 📦 Recent Scanner Additions (v3.1.0)
+
+The following scanners were added in version 3.1.0:
+
+- **Phoenix Native CSV**: `phoenix_csv`, `phoenix_csv_infra`, `phoenix_csv_cloud`, `phoenix_csv_web`, `phoenix_csv_software`
+- **Rapid7 CSV**: `rapid7_csv`
+
+See `PHOENIX_CSV_README.md` for complete documentation on Phoenix and Rapid7 CSV support.
+
+### 📊 Complete Supported Scanner List (206+ Types)
+
+The Phoenix Multi-Scanner Import Tool supports **206+ scanner types** across all security categories:
+
+#### 🆕 Phoenix Native & Rapid7 Scanners (v3.1.0)
+- **Phoenix CSV** - `phoenix_csv` (auto-detect), `phoenix_csv_infra` (INFRA), `phoenix_csv_cloud` (CLOUD), `phoenix_csv_web` (WEB), `phoenix_csv_software` (BUILD)
+- **Rapid7 CSV** - `rapid7_csv` (vulnerability export format)
+
+#### 🐳 Container & Image Scanners
+- **Trivy** - `trivy`, `trivy_operator`
+- **Grype** - `anchore_grype`
+- **Anchore** - `anchore_engine`, `anchore_enterprise`, `anchorectl_policies`, `anchorectl_vulns`
+- **Aqua** - `aqua`
+- **Twistlock/Prisma Cloud** - `twistlock`
+- **Sysdig** - `sysdig_cli`, `sysdig_reports`
+- **Harbor** - `harbor_vulnerability`
+- **Clair** - `clair`
+- **Docker** - `dockerbench`, `dockle`, `hadolint`
+- **NeuVector** - `neuvector`, `neuvector_compliance`
+- **GCloud** - `gcloud_artifact_scan`
+- **JFrog Xray** - `jfrogxray`, `jfrog_xray_api_summary_artifact`, `jfrog_xray_on_demand_binary_scan`, `jfrog_xray_unified`
+- **Xeol** - `xeol`
+
+#### 📦 Build & SCA (Software Composition Analysis)
+- **npm** - `npm_audit`, `npm_audit_7_plus`, `auditjs`, `retirejs`
+- **pip** - `pip_audit`
+- **Snyk** - `snyk`, `snyk_code`, `snyk_issue_api`
+- **OWASP Dependency Check** - `dependency_check`
+- **Dependency Track** - `dependency_track`
+- **CycloneDX** - `cyclonedx`
+- **BlackDuck** - `blackduck`, `blackduck_binary_analysis`, `blackduck_component_risk`, `api_blackduck`
+- **Mend (formerly WhiteSource)** - `mend`
+- **Sonatype** - `sonatype`, `ossindex_devaudit`
+- **ORT (OSS Review Toolkit)** - `ort`
+- **Veracode SCA** - `veracode_sca`
+- **Bundler Audit** - `bundler_audit`
+- **Cargo Audit** - `cargo_audit`
+- **Yarn Audit** - `yarn_audit`
+- **Nancy (Go)** - `nancy`
+- **govulncheck** - `govulncheck`
+- **OSV Scanner** - `osv_scanner`
+- **Meterian** - `meterian`
+- **SourceClear (Veracode)** - `source_scan.txt`
+- **ReversingLabs** - `reversinglabs_spectraassure`
+- **Scantist** - `scantist`
+
+#### ☁️ Cloud Security Scanners
+- **AWS Prowler** - `aws_prowler`, `aws_prowler_v3plus`, `aws_prowlerv4`
+- **AWS Inspector** - `aws_inspector2`
+- **AWS Security Hub** - `awssecurityhub`, `asff`
+- **Azure Security Center** - `azure_security_center_recommendations`
+- **Scout Suite** - `scout_suite`
+- **CloudSploit** - `cloudsploit`
+- **Wiz** - `wiz`, `wizcli_dir`, `wizcli_iac`, `wizcli_img`
+- **Checkov** - `checkov`
+- **Terrascan** - `terrascan`
+- **tfsec** - `tfsec`
+- **KICS** - `kics`
+- **KubeAudit** - `kubeaudit`
+- **Kubebench** - `kubebench`
+- **KubeHunter** - `kubehunter`
+- **Kubescape** - `kubescape`
+- **Popeye** - `popeye`
+- **Legitify** - `legitify`
+
+#### 💻 Code Security & SAST
+- **SonarQube** - `sonarqube`, `api_sonarqube`
+- **Checkmarx** - `checkmarx`, `checkmarx_cxflow_sast`, `checkmarx_one`, `checkmarx_osa`
+- **Fortify** - `fortify`
+- **Veracode** - `veracode`
+- **Coverity** - `coverity_api`, `coverity_scan`
+- **Semgrep** - `semgrep`, `semgrep_pro`
+- **Bandit (Python)** - `bandit`
+- **Brakeman (Ruby)** - `brakeman`
+- **gosec (Go)** - `gosec`
+- **ESLint** - `eslint`
+- **PMD** - `pmd`
+- **SpotBugs** - `spotbugs`
+- **HCL AppScan** - `hcl_appscan`, `hcl_asoc_sast`
+- **Horusec** - `horusec`
+- **MobSF** - `mobsf`, `mobsf_scorecard`, `mobsfscan`
+- **Xanitizer** - `xanitizer`
+- **PHP Security** - `php_security_audit_v2`, `php_symfony_security_check`, `progpilot`
+- **Ruby** - `rubocop`, `dawnscanner`
+- **Kiuwan** - `kiuwan`, `kiuwan_sca`
+- **Mayhem** - `mayhem`
+- **PWN SAST** - `pwn_sast`
+- **IBM AppScan** - `ibm_app`
+- **CodeChecker** - `codechecker`
+- **SKF** - `skf`
+
+#### 🔐 Secret Detection
+- **TruffleHog** - `trufflehog`, `trufflehog3`
+- **GitLeaks** - `gitleaks`
+- **GitHub Secret Scanning** - `github_secrets_detection_report`, `github_sast`
+- **GitLab Secret Detection** - `gitlab_secret_detection_report`
+- **detect-secrets** - `detect_secrets`
+- **ggshield (GitGuardian)** - `ggshield`
+- **Talisman** - `talisman`
+- **Whispers** - `whispers`
+- **Nosey Parker** - `noseyparker`
+- **CredScan** - `cred_scan`
+- **Rusty Hog** - `rusty_hog`
+- **Bearer CLI** - `bearer_cli`
+
+#### 🌐 Web Application & DAST
+- **Burp Suite** - `burp`, `burp_api`, `burp_dastardly`, `burp_graphql`, `burp_suite_dast`
+- **OWASP ZAP** - `zap`
+- **Acunetix** - `acunetix`
+- **Netsparker/Invicti** - `netsparker`, `invicti`
+- **Nikto** - `nikto`
+- **Arachni** - `arachni`
+- **Wapiti** - `wapiti`
+- **Contrast Security** - `contrast`
+- **HackerOne** - `h1`
+- **BugCrowd** - `bugcrowd`, `api_bugcrowd`
+- **Cobalt** - `cobalt`, `api_cobalt`
+- **MicroFocus WebInspect** - `microfocus_webinspect`
+- **AppSpider** - `appspider`
+- **AppCheck** - `appcheck_web_application_scanner`
+- **Crashtest Security** - `crashtest_security`
+- **ImmuniWeb** - `immuniweb`
+- **StackHawk** - `stackhawk`
+- **Wfuzz** - `wfuzz`
+- **WPScan** - `wpscan`
+- **EdgeScan** - `api_edgescan`
+- **Solar AppScreener** - `solar_appscreener`
+- **Humble** - `humble`
+- **HuskyCi** - `huskyci`
+- **Hydra** - `hydra`
+
+#### 🏢 Infrastructure & Vulnerability Scanners
+- **Qualys** - `qualys`, `qualys_hacker_guardian`, `qualys_infrascan_webgui`, `qualys_webapp`
+- **Tenable (Nessus)** - `tenable`
+- **Rapid7 Nexpose** - `nexpose`
+- **Rapid7 CSV** - `rapid7_csv` ⭐ NEW in v3.1.0
+- **Microsoft Defender** - `ms_defender`
+- **OpenVAS** - `openvas`
+- **Nmap** - `nmap`
+- **Wazuh** - `wazuh`
+- **Outpost24** - `outpost24`
+- **Risk Recon** - `risk_recon`
+- **Vulners** - `api_vulners`
+- **CyCognito** - `cycognito`
+- **IntSights** - `intsights`
+- **Deepfence ThreatMapper** - `deepfence_threatmapper`
+- **Cyberwatch** - `cyberwatch_galeax`
+- **Red Hat Satellite** - `redhatsatellite`
+- **DSOP** - `dsop`
+- **Rapplex** - `rapplex`
+- **Crunch42** - `crunch42`
+- **PTaaS** - `ptart`
+
+#### 🔒 SSL/TLS & Network Security
+- **TestSSL** - `testssl`
+- **SSLScan** - `sslscan`
+- **SSLyze** - `sslyze`
+- **SSL Labs** - `ssl_labs`
+- **SSH Audit** - `ssh_audit`
+- **Mozilla Observatory** - `mozilla_observatory`
+- **DrHeader** - `drheader`
+
+#### 🧪 GitLab CI/CD Integrations
+- **GitLab SAST** - `gitlab_sast`
+- **GitLab Dependency Scan** - `gitlab_dep_scan`
+- **GitLab Container Scan** - `gitlab_container_scan`
+- **GitLab DAST** - `gitlab_dast`
+- **GitLab API Fuzzing** - `gitlab_api_fuzzing`
+- **GitLab Secret Detection** - `gitlab_secret_detection_report`
+
+#### 🐙 GitHub Integrations
+- **GitHub SAST** - `github_sast`
+- **GitHub Secret Scanning** - `github_secrets_detection_report`
+- **GitHub Vulnerabilities** - `github_vulnerability`
+
+#### 🏗️ Compliance & Hardening
+- **OpenSCAP** - `openscap`
+- **Chef InSpec** - `chefinspect`
+- **Threagile** - `threagile`
+- **Threat Composer** - `threat_composer`
+- **VCG** - `vcg`
+
+#### 📄 Standard Formats
+- **SARIF** - `sarif` (universal static analysis format)
+
+#### 🔧 Specialized & Vendor-Specific
+- **Trustwave** - `trustwave`, `trustwave_fusion_api`
+- **WhiteHat Sentinel** - `whitehat_sentinel`
+- **KrakenD Audit** - `krakend_audit`
+
+#### 🎯 Auto-Detection
+- **Auto** - `auto` (attempts to detect scanner type from file content)
+
+### 🎯 Common Scanner Usage Examples
+
+```bash
+# Phoenix CSV (NEW in v3.1.0)
+python3 phoenix_multi_scanner_enhanced.py --file demo_infra.csv --scanner phoenix_csv_infra
+
+# Rapid7 CSV (NEW in v3.1.0)
+python3 phoenix_multi_scanner_enhanced.py --file vuln_report.csv --scanner rapid7_csv --asset-name "prod-server"
+
+# Trivy container scan
+python3 phoenix_multi_scanner_enhanced.py --file trivy-report.json --scanner trivy
+
+# AWS Prowler v4
+python3 phoenix_multi_scanner_enhanced.py --file prowler-output.json --scanner aws_prowlerv4
+
+# Burp Suite
+python3 phoenix_multi_scanner_enhanced.py --file burp-scan.xml --scanner burp
+
+# Snyk SCA
+python3 phoenix_multi_scanner_enhanced.py --file snyk-results.json --scanner snyk
+
+# Auto-detection
+python3 phoenix_multi_scanner_enhanced.py --file scan-results.json --scanner auto
+```
+
+### 📝 Scanner Type Notes
+
+- **Scanner names are case-insensitive** (e.g., `trivy` = `TRIVY` = `Trivy`)
+- **Auto-detection** (`--scanner auto`) attempts to identify scanner type from file content
+- **Phoenix CSV scanners** support asset name override via `--asset-name` flag
+- **CSV force upload** available via `--import-csv-force` for Phoenix native CSV files
+- See individual scanner documentation in `Utils/Loading_Script_V5/scanner_translators/` for specific format requirements
+
+### 🔗 Component Locations
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **Core Script** | `Utils/Loading_Script_V5/phoenix_multi_scanner_enhanced.py` | Main import script with 44+ translators |
+| **Scanner Client** | `Utils/Loading_Script_V5/phoenix-scanner-client/` | Python client for uploading to service API |
+| **Scanner Service** | `Utils/Loading_Script_V5/phoenix-scanner-service/` | Containerized REST API service |
+| **Translators** | `Utils/Loading_Script_V5/scanner_translators/` | Individual scanner format parsers |
+| **Documentation** | `Utils/Loading_Script_V5/*.md` | Usage guides and references |
+
+### 🐳 Container Updates
+
+When updating the scanner service:
+
+```bash
+# Rebuild service container after code changes
+cd Utils/Loading_Script_V5/phoenix-scanner-service
+make build
+make up
+
+# Verify service health
+make health
+```
+
+### 📚 Related Documentation
+
+- **Phoenix CSV Guide**: `Utils/Loading_Script_V5/PHOENIX_CSV_README.md`
+- **Quick Reference**: `Utils/Loading_Script_V5/PHOENIX_CSV_QUICK_REFERENCE.md`
+- **Scanner Client**: `Utils/Loading_Script_V5/phoenix-scanner-client/README.md`
+- **Scanner Service**: `Utils/Loading_Script_V5/phoenix-scanner-service/README.md`
+
+---
 
 ## 📚 Additional Resources
 

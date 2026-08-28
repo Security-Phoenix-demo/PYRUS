@@ -3,22 +3,22 @@ AzureDevopsAreaPath: comapny\FC_lima
 TeamWikiLocation: 
 TeamMembers:
 - Name: lewis lemon
-  EmailAddress: lewis.lean@company.com
+  EmailAddress: user@example.com
   EmployeeType: Employee
   Level: M5 Engineering Manager
 - Name: lara lemon
-  EmailAddress: lara.lemon@company.com
+  EmailAddress: user@example.com
   EmployeeType: Employee
   Level: L5 Senior Engineer
 - Name: elle lemon
-  EmailAddress: elle.lemon@company.com
+  EmailAddress: user@example.com
   EmployeeType: Employee
   Level: L4 Senior Engineer
 - Name: barry old
-  EmailAddress: barry.old@company.com
+  EmailAddress: user@example.com
   EmployeeType: Employee
   Level: L4 Senior Engineer
 - Name: david mcperosn
-  EmailAddress: david.mcperson@company.com
+  EmailAddress: user@example.com
   EmployeeType: Employee
   Level: L1 Associate Engineer
