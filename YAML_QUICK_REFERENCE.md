@@ -36,7 +36,7 @@ CreateUsersForApplications: true        # Auto-create users from Responsable (op
 DeploymentGroups:
   - AppName: "MyApp"                    # Required
     ReleaseDefinitions: []              # Required (can be empty)
-    Responsable: "owner@company.com"    # Required - User auto-created if missing
+    Responsable: "user@example.com"    # Required - User auto-created if missing
     TeamNames: ["Team1"]                # Optional
     Tier: 2                             # Optional (1-10)
     Components:
@@ -47,7 +47,7 @@ Environment Groups:
   - Name: "Production"                  # Required
     Type: "CLOUD"                       # Required (CLOUD/INFRA)
     Status: "Production"                # Required
-    Responsable: "owner@company.com"    # Required - User auto-created if missing
+    Responsable: "user@example.com"    # Required - User auto-created if missing
     Tier: 1                             # Required (1-10)
     Services:
       - Service: "my-service"           # Required
@@ -186,7 +186,7 @@ DeploymentGroups:
   Status: Production
   Deployment_set: example
   ReleaseDefinitions: []
-  Responsable: admin@example.com
+  Responsable: user@example.com
   Tier: 1
   TeamNames:
   - ExampleTeam
@@ -224,7 +224,7 @@ Environment Groups:
 - Name: Example-Prod
   Type: CLOUD
   Status: Production
-  Responsable: admin@example.com
+  Responsable: user@example.com
   Tier: 1
   Tag: Environment:Production
   TeamName: example

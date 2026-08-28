@@ -108,14 +108,14 @@ schema_registry.add('multi_condition_rule_schema',{
                     "required": False
                 },
                 "AccountId": {
-                    "type": "list",
+                    "type": ["string", "list"],
                     "schema": {
                         "type": "string"
                     },
                     "required": False
                 },
                 "ProviderAccountId": {
-                    "type": "list",
+                    "type": ["string", "list"],
                     "schema": {
                         "type": "string"
                     },
@@ -245,14 +245,14 @@ def validate_component(component):
             "required": False
         },
         "AccountId": {
-            "type": "list",
+            "type": ["string", "list"],
             "schema": {
                 "type": "string"
             },
             "required": False
         },
         "ProviderAccountId": {
-            "type": "list",
+            "type": ["string", "list"],
             "schema": {
                 "type": "string"
             },
@@ -660,14 +660,14 @@ def validate_service(service):
             "required": False
         },
         "AccountId": {
-            "type": "list",
+            "type": ["string", "list"],
             "schema": {
                 "type": "string"
             },
             "required": False
         },
         "ProviderAccountId": {
-            "type": "list",
+            "type": ["string", "list"],
             "schema": {
                 "type": "string"
             },

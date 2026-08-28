@@ -218,7 +218,7 @@ Describe 'PopulateDomains' {
         {
             $member = [PSCustomObject]@{
                 name = "test " +$i
-                EmailAddress = "test" +$i + "@EMAIL"
+                EmailAddress = "test" +$i + "@clear.bank"
             }
 
             $item.TeamMembers += $member
@@ -228,7 +228,7 @@ Describe 'PopulateDomains' {
 
         $HiveStaff = @{}
 
-        $output = DoesMemberExist "test1@EMAIL" $team $HiveStaff @()
+        $output = DoesMemberExist "user@example.com" $team $HiveStaff @()
         $output | Should -BeTrue
     }
 
@@ -243,7 +243,7 @@ Describe 'PopulateDomains' {
         {
             $member = [PSCustomObject]@{
                 name = "test " +$i
-                EmailAddress = "test" +$i + "@EMAIL"
+                EmailAddress = "test" +$i + "@clear.bank"
             }
 
             $item.TeamMembers += $member
@@ -253,9 +253,9 @@ Describe 'PopulateDomains' {
 
         $HiveStaff = @{}
 
-        $AllTeamAccess = @("test9@EMAIL", "test10@EMAIL")
+        $AllTeamAccess = @("user@example.com", "user@example.com")
 
-        $output = DoesMemberExist "test10@EMAIL" $team $HiveStaff $AllTeamAccess
+        $output = DoesMemberExist "user@example.com" $team $HiveStaff $AllTeamAccess
         $output | Should -BeTrue
     }
 
@@ -271,7 +271,7 @@ Describe 'PopulateDomains' {
         {
             $member = [PSCustomObject]@{
                 name = "test " +$i
-                EmailAddress = "test" +$i + "@EMAIL"
+                EmailAddress = "test" +$i + "@clear.bank"
             }
 
             $item.TeamMembers += $member
@@ -281,7 +281,7 @@ Describe 'PopulateDomains' {
 
         $HiveStaff = @{}
 
-        $output = DoesMemberExist "test10@EMAIL" $team $HiveStaff @()
+        $output = DoesMemberExist "user@example.com" $team $HiveStaff @()
         $output | Should -BeFalse
     }
 
@@ -297,7 +297,7 @@ Describe 'PopulateDomains' {
         {
             $member = [PSCustomObject]@{
                 name = "test " +$i
-                EmailAddress = "test" +$i + "@EMAIL"
+                EmailAddress = "test" +$i + "@clear.bank"
             }
 
             $item.TeamMembers += $member
@@ -308,10 +308,10 @@ Describe 'PopulateDomains' {
         $HiveStaff = @()
 
 
-        $products = @("test10@EMAIL", "test2@EMAIL")
+        $products = @("user@example.com", "user@example.com")
 
         $hiveObject = [PSCustomObject]@{
-            'Lead'   = "test1@EMAIL"
+            'Lead'   = "user@example.com"
             'Product' = $products
             'Team'   = "TestTeam"
         }
@@ -319,7 +319,7 @@ Describe 'PopulateDomains' {
         $HiveStaff += $hiveObject
 
 
-        $output = DoesMemberExist "test10@EMAIL" $team $HiveStaff @()
+        $output = DoesMemberExist "user@example.com" $team $HiveStaff @()
         $output | Should -BeTrue
     }
 
@@ -335,7 +335,7 @@ Describe 'PopulateDomains' {
         {
             $member = [PSCustomObject]@{
                 name = "test " +$i
-                EmailAddress = "test" +$i + "@EMAIL"
+                EmailAddress = "test" +$i + "@clear.bank"
             }
 
             $item.TeamMembers += $member
@@ -346,10 +346,10 @@ Describe 'PopulateDomains' {
         $HiveStaff = @()
 
 
-        $products = @("test10@EMAIL", "test2@EMAIL")
+        $products = @("user@example.com", "user@example.com")
 
         $hiveObject = [PSCustomObject]@{
-            'Lead'   = "test1@EMAIL"
+            'Lead'   = "user@example.com"
             'Product' = $products
             'Team'   = "TestTeam"
         }
@@ -357,7 +357,7 @@ Describe 'PopulateDomains' {
         $HiveStaff += $hiveObject
 
 
-        $output = DoesMemberExist "test999@EMAIL" $team $HiveStaff @()
+        $output = DoesMemberExist "user@example.com" $team $HiveStaff @()
         $output | Should -BeFalse
     }
 
@@ -379,12 +379,12 @@ Describe 'PopulateDomains' {
         {
             $staffs.TeamMembers += [PSCustomObject]@{
                 Name = "Test"
-                EmailAddress = "test" +$i + "@EMAIL" 
+                EmailAddress = "test" +$i + "@clear.bank" 
             }
 
             $principals.TeamMembers += [PSCustomObject]@{
                 Name = "P"
-                EmailAddress = "p" +$i + "@EMAIL" 
+                EmailAddress = "p" +$i + "@clear.bank" 
             }
         }
 
@@ -395,4 +395,3 @@ Describe 'PopulateDomains' {
         $output.count | Should -Be 6
     }
 }
-

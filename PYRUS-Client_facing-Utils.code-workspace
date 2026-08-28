@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"name": "Autoconfig-PYRUS-PRIV",
+			"path": "."
+		},
+		{
+			"name": "PYRUS-PUB-NEW",
+			"path": "../PYRUS-PUB-NEW"
+		},
+		{
+			"name": "Utils-PUB-NEW-2",
+			"path": "../Utils-PUB-NEW-2"
+		}
+	],
+	"settings": {}
+}

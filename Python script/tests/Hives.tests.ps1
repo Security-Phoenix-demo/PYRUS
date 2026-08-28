@@ -41,17 +41,16 @@ Describe 'Hives' {
         $output = PopulateHives  $ResourcePath
         $output.Count | Should -Be 46
 
-        $Team = $output | Where-Object { $_.Team -eq 'narwhal' }
-        $Team.Product.Count | Should -Be 3
+        $narwhalTeam = $output | Where-Object { $_.Team -eq 'narwhal' }
+        $narwhalTeam.Product.Count | Should -Be 3
     }
 
-    It 'Should contain COMPANY Email' {
+    It 'Should contain ClearBank Email' {
         $ResourcePath = Join-Path -Path $PSScriptRoot -ChildPath "/Resources"
         
         $output = PopulateHives  $ResourcePath
         $output | ForEach-Object {
-            $_.Lead | Should -Match "@EAMIL$"
+            $_.Lead | Should -Match "@clear.bank$"
         }
     }
 }
-
