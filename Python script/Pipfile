@@ -9,7 +9,7 @@ pyyaml = "*"
 email-validator = "*"
 levenshtein = "==0.25.1"
 GitPython = "*"
-requests = ">=2.32.4"  # SECURITY: Fix CVE-2024-47081 (.netrc credentials leak)
+requests = ">=2.33.0"  # SECURITY: Fix CVE-2024-47081 (.netrc credentials leak)
 urllib3 = ">=2.6.0"  # SECURITY: Fix CVE-2025-66418, CVE-2025-66471 (decompression chain attacks)
 
 [dev-packages]
