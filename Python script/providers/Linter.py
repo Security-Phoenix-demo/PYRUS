@@ -134,6 +134,111 @@ schema_registry.add('multi_condition_rule_schema',{
                         "type": "string"
                     },
                     "required": False
+                },
+                # Exclusion criteria: same Pyrus field names as inclusion, with _NOT suffix
+                "RepositoryName_NOT": {
+                    "type": ["string", "list"],
+                    "required": False
+                },
+                "SearchName_NOT": {
+                    "type": "string",
+                    "required": False,
+                },
+                "AssetType_NOT": {
+                    "type": "string",
+                    "required": False,
+                    "allowed": [
+                        "REPOSITORY", "SOURCE_CODE", "BUILD", "WEBSITE_API", "CONTAINER", "INFRA", "CLOUD", "WEB", "FOSS", "SAST"
+                    ]
+                },
+                "Tag_NOT": {
+                    "type": ["string", "list"],
+                    "required": False
+                },
+                "Tags_NOT": {
+                    "type": "list",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "required": False
+                },
+                "Tag_rule_NOT": {
+                    "type": ["string", "list"],
+                    "required": False
+                },
+                "Tags_rule_NOT": {
+                    "type": "list",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "required": False
+                },
+                "Cidr_NOT": {
+                    "type": "string",
+                    "required": False
+                },
+                "Cidrs_NOT": {
+                    "type": ["string", "list"],
+                    "schema": {
+                        "type": "string"
+                    },
+                    "required": False
+                },
+                "Fqdn_NOT": {
+                    "type": "list",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "required": False
+                },
+                "Netbios_NOT": {
+                    "type": "list",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "required": False
+                },
+                "OsNames_NOT": {
+                    "type": "list",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "required": False
+                },
+                "Hostnames_NOT": {
+                    "type": "list",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "required": False
+                },
+                "AccountId_NOT": {
+                    "type": ["string", "list"],
+                    "schema": {
+                        "type": "string"
+                    },
+                    "required": False
+                },
+                "ProviderAccountId_NOT": {
+                    "type": ["string", "list"],
+                    "schema": {
+                        "type": "string"
+                    },
+                    "required": False
+                },
+                "ProviderAccountName_NOT": {
+                    "type": "list",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "required": False
+                },
+                "ResourceGroup_NOT": {
+                    "type": "list",
+                    "schema": {
+                        "type": "string"
+                    },
+                    "required": False
                 }
             })
 
